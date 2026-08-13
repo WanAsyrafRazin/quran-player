@@ -174,9 +174,13 @@
         }
         .segmented-control.mode-select {
             margin: 10px 20px;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
             gap: 6px;
+        }
+        .segmented-control.mode-select .seg-option {
+            flex: 0 0 calc((100% - 12px) / 3);
         }
 
         .seg-option {
