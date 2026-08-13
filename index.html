@@ -346,7 +346,6 @@
         localStorage.setItem('quran_player_theme', isDark ? 'dark' : 'light');
     }
 
-    // Check stored theme preference on load
     if (localStorage.getItem('quran_player_theme') === 'dark') {
         document.body.classList.add('dark-mode');
         document.getElementById('theme-toggle-btn').innerText = '☀️';
@@ -356,8 +355,7 @@
     let allAyahs = [];
     let allPages = [];
     let currentMode = 'ayah'; 
-    let maherReciterId = null; 
-    let chapterCache = {}; 
+    let localTimestampDB = {}; // NEW: Stores our local JSON data
     
     // --- 2. Gapless A-B Engine Variables ---
     let isPlaying = false;
@@ -367,8 +365,10 @@
     let currentAyahRepeatCount = 1;
     let currentRangeRepeatCount = 1;
 
+    // Load initial structure AND our local timestamp file on page load
     async function loadQuranData() {
         try {
+            // 1. Fetch Structure
             const structureRes = await fetch('https://api.alquran.cloud/v1/quran/en.asad');
             const data = await structureRes.json();
             
@@ -396,13 +396,9 @@
                 });
             });
 
-            const reciterRes = await fetch('https://api.quran.com/api/v4/resources/chapter_reciters?language=en');
-            const reciterData = await reciterRes.json();
-            const maher = reciterData.reciters.find(r => 
-                r.name.toLowerCase().includes('maher') || 
-                (r.translated_name && r.translated_name.name.toLowerCase().includes('maher'))
-            );
-            maherReciterId = maher ? maher.id : 12; 
+            // 2. Fetch our pre-downloaded local timestamp database (INSTANT)
+            const tsRes = await fetch('maher_timestamps.json');
+            localTimestampDB = await tsRes.json();
             
             populateDropdowns();
         } catch (error) {
@@ -486,8 +482,8 @@
         element.classList.add('selected');
     }
 
-    // --- 3. The True Gapless A-B Engine ---
-    async function togglePlay() {
+    // --- 3. The True Gapless A-B Engine (NOW INSTANT) ---
+    function togglePlay() {
         const playBtn = document.getElementById('play-btn');
 
         if (isPlaying) {
@@ -514,12 +510,11 @@
 
         const selectedAyahs = allAyahs.slice(startIndex, endIndex + 1);
         
-        playBtn.innerText = "Loading Audio Data...";
-        playlist = await buildTimestampPlaylist(selectedAyahs);
+        // This is now instant because it reads from localTimestampDB
+        playlist = buildTimestampPlaylist(selectedAyahs);
 
         if (playlist.length === 0) {
-            alert("API Timestamp data unavailable for this selection.");
-            playBtn.innerText = "Play Recitation";
+            alert("Timestamp data unavailable for this selection.");
             return;
         }
 
@@ -534,19 +529,14 @@
         playCurrentVerse();
     }
 
-    async function buildTimestampPlaylist(selectedAyahs) {
+    // Reads from local data instead of fetching APIs
+    function buildTimestampPlaylist(selectedAyahs) {
         let localPlaylist = [];
         const surahsNeeded = [...new Set(selectedAyahs.map(a => a.surahNum))];
 
         for (let surahNum of surahsNeeded) {
-            if (!chapterCache[surahNum]) {
-                const res = await fetch(`https://api.quran.com/api/v4/chapter_recitations/${maherReciterId}/${surahNum}`);
-                const data = await res.json();
-                chapterCache[surahNum] = data.audio_file;
-            }
-            
-            const audioData = chapterCache[surahNum];
-            if (!audioData.timestamps || audioData.timestamps.length === 0) continue; 
+            const audioData = localTimestampDB[surahNum];
+            if (!audioData || !audioData.timestamps || audioData.timestamps.length === 0) continue; 
 
             const ayahsInSurah = selectedAyahs.filter(a => a.surahNum === surahNum);
             
