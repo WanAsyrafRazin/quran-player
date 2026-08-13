@@ -1,5 +1,5 @@
 // Quran Player Service Worker — offline support
-const CACHE = 'quran-player-v4';
+const CACHE = 'quran-player-v5';
 const SHELL = [
   './',
   './index.html',
