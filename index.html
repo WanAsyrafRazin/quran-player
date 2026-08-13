@@ -34,13 +34,14 @@
             font-weight: 600;
             margin-bottom: 8px;
             margin-left: 20px;
+            margin-top: 20px;
         }
 
         .section-panel {
             background-color: #FFFFFF;
             border-radius: 16px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
-            margin-bottom: 24px;
+            margin-bottom: 10px;
             overflow: hidden;
         }
 
@@ -69,19 +70,14 @@
             transition: all 0.2s ease;
         }
 
-        .adjust-option:hover {
-            color: #FFFFFF;
-        }
-
+        .adjust-option:hover { color: #FFFFFF; }
         .adjust-option.selected {
             background-color: #FFFFFF;
             color: #3F5E68;
         }
 
         /* Playing Verses List Styles */
-        .verses-panel {
-            padding: 8px 0;
-        }
+        .verses-panel { padding: 8px 0; }
 
         .verse-item {
             display: flex;
@@ -90,11 +86,7 @@
             padding: 14px 20px;
             border-bottom: 1px solid #EAECEF;
         }
-
-        .verse-item:last-child {
-            border-bottom: none;
-        }
-
+        .verse-item:last-child { border-bottom: none; }
         .verse-label {
             font-weight: 600;
             font-size: 16px;
@@ -112,9 +104,10 @@
             outline: none;
             cursor: pointer;
             text-align: right;
-            direction: ltr; /* Keeps numbering on the left */
+            direction: ltr; 
             appearance: none; 
             -webkit-appearance: none;
+            max-width: 250px;
         }
 
         .verse-select-container {
@@ -141,6 +134,9 @@
             padding: 3px;
             border-radius: 12px;
             margin: 0 20px;
+        }
+        .segmented-control.mode-select {
+            margin: 10px 20px;
         }
 
         .seg-option {
@@ -176,22 +172,16 @@
             cursor: pointer;
             box-shadow: 0 4px 12px rgba(63, 94, 104, 0.3);
             transition: background-color 0.2s;
-            margin-top: 10px;
+            margin-top: 20px;
         }
-
-        .play-button:hover {
-            background-color: #2E454D;
-        }
-        
-        .play-button.playing {
-            background-color: #C0392B; /* Red color when playing to indicate stop */
-        }
+        .play-button:hover { background-color: #2E454D; }
+        .play-button.playing { background-color: #C0392B; }
     </style>
 </head>
 <body>
 
 <div class="player-container">
-    <div class="section-header">ADJUST END VERSE TO THE END OF THE</div>
+    <div class="section-header" style="margin-top:0;">ADJUST END VERSE TO THE END OF THE</div>
     <div class="section-panel adjust-panel">
         <div class="adjust-control" id="end-verse-selector">
             <button class="adjust-option selected" onclick="selectAdjust(this, 'page')">Page</button>
@@ -201,12 +191,21 @@
         </div>
     </div>
 
-    <div class="section-header">PLAYING VERSES</div>
+    <!-- NEW: Selection Mode Toggle -->
+    <div class="section-header">SELECTION MODE</div>
+    <div class="section-panel">
+        <div class="segmented-control mode-select">
+            <button class="seg-option selected" onclick="changeMode(this, 'ayah')">By Ayah</button>
+            <button class="seg-option" onclick="changeMode(this, 'page')">By Juz & Page</button>
+        </div>
+    </div>
+
+    <div class="section-header">PLAYING SELECTION</div>
     <div class="section-panel verses-panel">
         <div class="verse-item">
             <div class="verse-label">From</div>
             <div class="verse-select-container">
-                <select id="from-verse" class="verse-select">
+                <select id="from-verse" class="verse-select" onchange="checkOrder()">
                     <option>Loading Database...</option>
                 </select>
                 <span class="chevron-right"></span>
@@ -215,7 +214,7 @@
         <div class="verse-item">
             <div class="verse-label">To</div>
             <div class="verse-select-container">
-                <select id="to-verse" class="verse-select">
+                <select id="to-verse" class="verse-select" onchange="checkOrder('to')">
                     <option>Loading Database...</option>
                 </select>
                 <span class="chevron-right"></span>
@@ -251,10 +250,15 @@
 <script>
     // --- 1. Database and Setup ---
     let allAyahs = [];
+    let allPages = [];
+    let currentMode = 'ayah'; // 'ayah' or 'page'
     
-    // Audio Player Variables
+    // Gapless Double-Buffering Audio Engine
     let isPlaying = false;
-    let audioPlayer = new Audio();
+    let playerA = new Audio();
+    let playerB = new Audio();
+    let activePlayer = playerA; // Toggles between A and B
+    
     let playlist = [];
     let currentAyahIndex = 0;
     let currentAyahRepeatCount = 1;
@@ -262,12 +266,14 @@
 
     async function loadQuranData() {
         try {
-            // Fetch entire structure so we know the exact Page and Juz of every single verse
             const response = await fetch('https://api.alquran.cloud/v1/quran/en.asad');
             const data = await response.json();
             
+            let currentPage = 0;
+
             data.data.surahs.forEach(surah => {
                 surah.ayahs.forEach(ayah => {
+                    // Populate Ayah Database
                     allAyahs.push({
                         globalNum: ayah.number,
                         surahNum: surah.number,
@@ -277,6 +283,17 @@
                         juz: ayah.juz,
                         value: `${surah.number}:${ayah.numberInSurah}`
                     });
+
+                    // Build Unique Page/Juz Database
+                    if (ayah.page !== currentPage) {
+                        currentPage = ayah.page;
+                        allPages.push({
+                            page: ayah.page,
+                            juz: ayah.juz,
+                            value: ayah.page.toString(),
+                            label: `Juz ${ayah.juz} - Page ${ayah.page}`
+                        });
+                    }
                 });
             });
             populateDropdowns();
@@ -286,26 +303,61 @@
         }
     }
 
+    function changeMode(element, mode) {
+        selectSegmented(element); // Update button visual
+        currentMode = mode;
+        populateDropdowns();
+    }
+
     function populateDropdowns() {
         const fromSelect = document.getElementById('from-verse');
         const toSelect = document.getElementById('to-verse');
         let optionsHTML = '';
 
-        allAyahs.forEach(ayah => {
-            optionsHTML += `<option value="${ayah.value}">${ayah.surahNum}. ${ayah.surahName} - Ayah ${ayah.ayahNum}</option>`;
-        });
-
-        fromSelect.innerHTML = optionsHTML;
-        toSelect.innerHTML = optionsHTML;
-
-        // Set Default selection
-        fromSelect.value = "1:1";
-        toSelect.value = "1:7";
+        if (currentMode === 'ayah') {
+            allAyahs.forEach(ayah => {
+                optionsHTML += `<option value="${ayah.value}">${ayah.surahNum}. ${ayah.surahName} - Ayah ${ayah.ayahNum}</option>`;
+            });
+            fromSelect.innerHTML = optionsHTML;
+            toSelect.innerHTML = optionsHTML;
+            fromSelect.value = "1:1";
+            toSelect.value = "1:7";
+        } else {
+            allPages.forEach(p => {
+                optionsHTML += `<option value="${p.value}">${p.label}</option>`;
+            });
+            fromSelect.innerHTML = optionsHTML;
+            toSelect.innerHTML = optionsHTML;
+            fromSelect.value = "1";
+            toSelect.value = "2";
+        }
     }
 
-    // --- 2. UI Interactions ---
+    // --- NEW: Auto-Correct Order ---
+    function checkOrder(triggeredBy = 'from') {
+        const fromSelect = document.getElementById('from-verse');
+        const toSelect = document.getElementById('to-verse');
+        
+        if (currentMode === 'ayah') {
+            const fromIndex = allAyahs.findIndex(a => a.value === fromSelect.value);
+            const toIndex = allAyahs.findIndex(a => a.value === toSelect.value);
+            
+            // If "From" is pushed ahead of "To", pull "To" forward to match it
+            if (fromIndex > toIndex && triggeredBy === 'from') {
+                toSelect.value = fromSelect.value;
+            }
+        } else if (currentMode === 'page') {
+            const fromPage = parseInt(fromSelect.value);
+            const toPage = parseInt(toSelect.value);
+            
+            if (fromPage > toPage && triggeredBy === 'from') {
+                toSelect.value = fromSelect.value;
+            }
+        }
+    }
+
+    // --- UI Interactions ---
     function selectAdjust(element, mode) {
-        // Visual Update
         const parent = element.parentElement;
         parent.querySelectorAll('.adjust-option').forEach(btn => btn.classList.remove('selected'));
         element.classList.add('selected');
@@ -313,11 +365,16 @@
         const fromValue = document.getElementById('from-verse').value;
         if (!fromValue || allAyahs.length === 0) return;
 
-        // Find where we are currently starting
-        const startAyah = allAyahs.find(a => a.value === fromValue);
+        let startAyah;
+        if (currentMode === 'ayah') {
+            startAyah = allAyahs.find(a => a.value === fromValue);
+        } else {
+            // If in page mode, find the first ayah of that page
+            startAyah = allAyahs.find(a => a.page === parseInt(fromValue));
+        }
+
         let endAyah = startAyah;
 
-        // Search the array in reverse to find the very LAST verse that matches the condition
         if (mode === 'page') {
             endAyah = allAyahs.slice().reverse().find(a => a.page === startAyah.page);
         } else if (mode === 'surah') {
@@ -325,11 +382,14 @@
         } else if (mode === 'juz') {
             endAyah = allAyahs.slice().reverse().find(a => a.juz === startAyah.juz);
         } else if (mode === 'quran') {
-            endAyah = allAyahs[allAyahs.length - 1]; // Last verse of the Quran
+            endAyah = allAyahs[allAyahs.length - 1]; 
         }
 
-        if (endAyah) {
+        // Snap the dropdowns to match the new endpoints
+        if (currentMode === 'ayah') {
             document.getElementById('to-verse').value = endAyah.value;
+        } else {
+            document.getElementById('to-verse').value = endAyah.page.toString();
         }
     }
 
@@ -339,12 +399,13 @@
         element.classList.add('selected');
     }
 
-    // --- 3. Audio Engine ---
+    // --- 3. Double-Buffering Audio Engine ---
     function togglePlay() {
         const playBtn = document.getElementById('play-btn');
 
         if (isPlaying) {
-            audioPlayer.pause();
+            playerA.pause();
+            playerB.pause();
             isPlaying = false;
             playBtn.innerText = "Play Recitation";
             playBtn.classList.remove('playing');
@@ -354,15 +415,18 @@
         const fromValue = document.getElementById('from-verse').value;
         const toValue = document.getElementById('to-verse').value;
         
-        const startIndex = allAyahs.findIndex(a => a.value === fromValue);
-        const endIndex = allAyahs.findIndex(a => a.value === toValue);
+        let startIndex, endIndex;
 
-        if (startIndex > endIndex) {
-            alert("The 'From' verse must be before the 'To' verse.");
-            return;
+        if (currentMode === 'ayah') {
+            startIndex = allAyahs.findIndex(a => a.value === fromValue);
+            endIndex = allAyahs.findIndex(a => a.value === toValue);
+        } else {
+            // If by page, find first ayah of start page, and last ayah of end page
+            startIndex = allAyahs.findIndex(a => a.page === parseInt(fromValue));
+            endIndex = allAyahs.slice().reverse().findIndex(a => a.page === parseInt(toValue));
+            endIndex = (allAyahs.length - 1) - endIndex; // correct reverse index
         }
 
-        // Build the playlist from the selected range
         playlist = allAyahs.slice(startIndex, endIndex + 1);
         currentAyahIndex = 0;
         currentAyahRepeatCount = 1;
@@ -372,59 +436,95 @@
         playBtn.innerText = "Stop Recitation";
         playBtn.classList.add('playing');
         
+        // Start the engine
+        activePlayer = playerA;
         playCurrentVerse();
+    }
+
+    function getAudioUrl(globalNum) {
+        return `https://cdn.islamic.network/quran/audio/128/ar.mahermuaiqly/${globalNum}.mp3`;
     }
 
     function playCurrentVerse() {
         if (currentAyahIndex >= playlist.length) {
-            // Failsafe if it reaches the end
             document.getElementById('play-btn').click();
             return;
         }
 
         const ayah = playlist[currentAyahIndex];
-        // Fetch Maher al Muaiqly audio using the global ayah number
-        audioPlayer.src = `https://cdn.islamic.network/quran/audio/128/ar.mahermuaiqly/${ayah.globalNum}.mp3`;
-        audioPlayer.play();
+        activePlayer.src = getAudioUrl(ayah.globalNum);
+        activePlayer.play();
+
+        preloadNextVerse();
     }
 
-    audioPlayer.onended = () => {
+    function preloadNextVerse() {
+        const ayahRepeatVal = document.querySelector('#each-verse-repeat .selected').getAttribute('data-val');
+        
+        // Figure out what the *next* audio file will be to preload it
+        let nextGlobalNum = null;
+
+        if (ayahRepeatVal === 'loop' || currentAyahRepeatCount < parseInt(ayahRepeatVal)) {
+            // We will be repeating the same ayah
+            nextGlobalNum = playlist[currentAyahIndex].globalNum;
+        } else if (currentAyahIndex + 1 < playlist.length) {
+            // We will be moving to the next ayah
+            nextGlobalNum = playlist[currentAyahIndex + 1].globalNum;
+        }
+
+        // Buffer it into the inactive player
+        if (nextGlobalNum) {
+            let inactivePlayer = (activePlayer === playerA) ? playerB : playerA;
+            inactivePlayer.src = getAudioUrl(nextGlobalNum);
+            inactivePlayer.preload = "auto";
+        }
+    }
+
+    // Attach the logic to both players
+    function handleAudioEnded() {
         if (!isPlaying) return; 
 
         const ayahRepeatVal = document.querySelector('#each-verse-repeat .selected').getAttribute('data-val');
         const setRepeatVal = document.querySelector('#set-verses-repeat .selected').getAttribute('data-val');
 
-        // 1. Check if the current single Ayah needs to be repeated
+        // Swap active players for gapless effect
+        activePlayer = (activePlayer === playerA) ? playerB : playerA;
+
+        // 1. Check if single Ayah needs repeat
         if (ayahRepeatVal === 'loop' || currentAyahRepeatCount < parseInt(ayahRepeatVal)) {
             if (ayahRepeatVal !== 'loop') currentAyahRepeatCount++;
-            playCurrentVerse();
+            activePlayer.play(); // Play the preloaded track instantly
+            preloadNextVerse();
             return;
         }
 
-        // 2. If finished repeating the single ayah, move to the next one
+        // 2. Move to next ayah
         currentAyahRepeatCount = 1;
         currentAyahIndex++;
 
-        // 3. Check if we have finished all ayahs in the selected range
+        // 3. Check if playlist finished
         if (currentAyahIndex >= playlist.length) {
-            // Check if the entire set needs to be repeated
             if (setRepeatVal === 'loop' || currentRangeRepeatCount < parseInt(setRepeatVal)) {
                 if (setRepeatVal !== 'loop') currentRangeRepeatCount++;
-                currentAyahIndex = 0; // Go back to the start of the playlist
-                playCurrentVerse();
+                currentAyahIndex = 0; 
+                activePlayer.src = getAudioUrl(playlist[currentAyahIndex].globalNum);
+                activePlayer.play();
+                preloadNextVerse();
                 return;
             } else {
-                // Completely finished playing
-                document.getElementById('play-btn').click(); // Triggers the stop logic
+                document.getElementById('play-btn').click(); 
                 return;
             }
         }
 
-        // If we are still in the middle of the playlist, play the next verse
-        playCurrentVerse();
-    };
+        activePlayer.play(); // Play the preloaded track instantly
+        preloadNextVerse();
+    }
 
-    // Initialize the app on load
+    playerA.onended = handleAudioEnded;
+    playerB.onended = handleAudioEnded;
+
+    // Initialize on load
     loadQuranData();
 </script>
 
