@@ -262,6 +262,25 @@
             color: #FFFFFF;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
+
+        /* Playback Speed Styles */
+        #speed-slider {
+            width: calc(100% - 40px);
+            margin: 10px 20px 2px 20px;
+            accent-color: #3F5E68;
+            cursor: pointer;
+        }
+        .speed-labels {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 24px;
+            color: #8E919D;
+            font-size: 12px;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+        body.dark-mode #speed-slider { accent-color: #7FB3C9; }
+        body.dark-mode .speed-labels { color: #718096; }
     </style>
 </head>
 <body>
@@ -334,6 +353,23 @@
         <div style="height: 10px;"></div>
     </div>
 
+    <div class="section-header">PLAYBACK SPEED</div>
+    <div class="section-panel">
+        <div class="segmented-control" id="speed-presets">
+            <button class="seg-option" data-speed="0.5" onclick="selectSpeed(this, 0.5)">0.5x</button>
+            <button class="seg-option" data-speed="0.75" onclick="selectSpeed(this, 0.75)">0.75x</button>
+            <button class="seg-option selected" data-speed="1" onclick="selectSpeed(this, 1)">1x</button>
+            <button class="seg-option" data-speed="1.5" onclick="selectSpeed(this, 1.5)">1.5x</button>
+            <button class="seg-option" data-speed="2" onclick="selectSpeed(this, 2)">2x</button>
+        </div>
+        <input type="range" id="speed-slider" min="0.5" max="2" step="0.05" value="1" oninput="setSpeed(this.value)">
+        <div class="speed-labels">
+            <span>0.5x</span>
+            <span id="speed-value">1.0x</span>
+            <span>2x</span>
+        </div>
+    </div>
+
     <button id="play-btn" class="play-button" onclick="togglePlay()">Play Recitation</button>
 </div>
 
@@ -356,6 +392,8 @@
     let allPages = [];
     let currentMode = 'ayah'; 
     let localTimestampDB = {}; // NEW: Stores our local JSON data
+    let playbackSpeed = parseFloat(localStorage.getItem('quran_player_speed')) || 1;
+    if (playbackSpeed < 0.5 || playbackSpeed > 2) playbackSpeed = 1;
     
     // --- 2. Gapless A-B Engine Variables ---
     let isPlaying = false;
@@ -482,6 +520,23 @@
         element.classList.add('selected');
     }
 
+    // --- Playback Speed Control ---
+    function setSpeed(speed) {
+        speed = Math.min(2, Math.max(0.5, parseFloat(speed) || 1));
+        playbackSpeed = speed;
+        audioPlayer.playbackRate = speed;
+        document.getElementById('speed-slider').value = speed;
+        document.getElementById('speed-value').innerText = speed.toFixed(2).replace(/0$/, '') + 'x';
+        document.querySelectorAll('#speed-presets .seg-option').forEach(btn =>
+            btn.classList.toggle('selected', Math.abs(parseFloat(btn.dataset.speed) - speed) < 0.001)
+        );
+        localStorage.setItem('quran_player_speed', speed);
+    }
+
+    function selectSpeed(element, speed) {
+        setSpeed(speed);
+    }
+
     // --- 3. The True Gapless A-B Engine (NOW INSTANT) ---
     function togglePlay() {
         const playBtn = document.getElementById('play-btn');
@@ -569,6 +624,7 @@
         }
 
         audioPlayer.currentTime = currentVerse.start_time;
+        audioPlayer.playbackRate = playbackSpeed;
         audioPlayer.play();
 
         audioPlayer.ontimeupdate = handleTimeUpdate;
@@ -623,6 +679,7 @@
     };
 
     // Initialize on load
+    setSpeed(playbackSpeed); // apply saved playback speed
     loadQuranData();
 </script>
 
