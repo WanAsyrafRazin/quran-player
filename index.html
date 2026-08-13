@@ -281,6 +281,66 @@
         }
         body.dark-mode #speed-slider { accent-color: #7FB3C9; }
         body.dark-mode .speed-labels { color: #718096; }
+
+        /* Now Playing Styles */
+        .now-playing {
+            text-align: center;
+            padding: 12px 16px;
+            border-radius: 10px;
+            background: #F2F5F7;
+            color: #2D3748;
+            font-size: 15px;
+            font-weight: 600;
+            min-height: 20px;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+        .now-playing .np-sub {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: #8E919D;
+            margin-top: 4px;
+        }
+        body.dark-mode .now-playing {
+            background: #1A232E;
+            color: #E2E8F0;
+        }
+        body.dark-mode .now-playing .np-sub { color: #718096; }
+
+        /* Quick Jump Styles */
+        .jump-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 4px 20px 8px 20px;
+        }
+        #jump-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #CBD5E0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #FFFFFF;
+            color: #2D3748;
+        }
+        #jump-go {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 8px;
+            background: #3F5E68;
+            color: #FFFFFF;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        #jump-go:hover { background: #334B54; }
+        body.dark-mode #jump-input {
+            background: #1A232E;
+            border-color: #2D3748;
+            color: #E2E8F0;
+        }
+        body.dark-mode #jump-go { background: #2D3748; }
+        body.dark-mode #jump-go:hover { background: #3A4A5C; }
     </style>
 </head>
 <body>
@@ -297,6 +357,7 @@
             <button class="adjust-option selected" onclick="selectAdjust(this, 'page')">Page</button>
             <button class="adjust-option" onclick="selectAdjust(this, 'surah')">Surah</button>
             <button class="adjust-option" onclick="selectAdjust(this, 'juz')">Juz'</button>
+            <button class="adjust-option" onclick="selectAdjust(this, 'maqra')">Maqra'</button>
             <button class="adjust-option" onclick="selectAdjust(this, 'quran')">Quran</button>
         </div>
     </div>
@@ -305,7 +366,9 @@
     <div class="section-panel">
         <div class="segmented-control mode-select">
             <button class="seg-option selected" onclick="changeMode(this, 'ayah')">By Ayah</button>
-            <button class="seg-option" onclick="changeMode(this, 'page')">By Juz & Page</button>
+            <button class="seg-option" onclick="changeMode(this, 'page')">By Page</button>
+            <button class="seg-option" onclick="changeMode(this, 'maqra')">By Maqra'</button>
+            <button class="seg-option" onclick="changeMode(this, 'juz')">By Juz</button>
         </div>
     </div>
 
@@ -329,6 +392,21 @@
                 <span class="chevron-right"></span>
             </div>
         </div>
+    </div>
+
+    <div class="section-header">QUICK JUMP</div>
+    <div class="section-panel">
+        <div class="jump-row">
+            <input type="text" id="jump-input" placeholder="Page number (1-604)" onkeydown="if(event.key==='Enter')jumpGo()">
+            <button id="jump-go" onclick="jumpGo()">Go</button>
+        </div>
+        <div style="height: 4px;"></div>
+    </div>
+
+    <div class="section-header">NOW PLAYING</div>
+    <div class="section-panel">
+        <div id="now-playing" class="now-playing">Not playing</div>
+        <div style="height: 4px;"></div>
     </div>
 
     <div class="section-header">PLAY EACH VERSE</div>
@@ -358,7 +436,6 @@
         <div class="segmented-control" id="recitation-selector">
             <button class="seg-option" data-file="murattal_timestamps.json" onclick="setRecitation(this, 'murattal_timestamps.json')">Murattal (fast)</button>
             <button class="seg-option" data-file="mujawwad_timestamps.json" onclick="setRecitation(this, 'mujawwad_timestamps.json')">Mujawwad</button>
-            <button class="seg-option" data-file="maher_timestamps.json" onclick="setRecitation(this, 'maher_timestamps.json')">Year 1440</button>
         </div>
         <div style="height: 10px;"></div>
     </div>
@@ -404,7 +481,8 @@
     let localTimestampDB = {}; // NEW: Stores our local JSON data
     let playbackSpeed = parseFloat(localStorage.getItem('quran_player_speed')) || 1;
     if (playbackSpeed < 0.5 || playbackSpeed > 2) playbackSpeed = 1;
-    let recitationFile = localStorage.getItem('quran_player_recitation') || 'murattal_timestamps.json';
+    const savedRecitation = localStorage.getItem('quran_player_recitation');
+    let recitationFile = (savedRecitation === 'mujawwad_timestamps.json') ? savedRecitation : 'murattal_timestamps.json';
     
     // --- 2. Gapless A-B Engine Variables ---
     let isPlaying = false;
@@ -430,6 +508,7 @@
                         ayahNum: ayah.numberInSurah,
                         page: ayah.page,
                         juz: ayah.juz,
+                        maqra: ayah.hizbQuarter,
                         value: `${surah.number}:${ayah.numberInSurah}`
                     });
 
@@ -476,7 +555,7 @@
             toSelect.innerHTML = optionsHTML;
             fromSelect.value = "1:1";
             toSelect.value = "1:7";
-        } else {
+        } else if (currentMode === 'page') {
             allPages.forEach(p => {
                 optionsHTML += `<option value="${p.value}">${p.label}</option>`;
             });
@@ -484,7 +563,34 @@
             toSelect.innerHTML = optionsHTML;
             fromSelect.value = "1";
             toSelect.value = "2";
+        } else if (currentMode === 'maqra') {
+            for (let m = 1; m <= 240; m++) {
+                const first = allAyahs.find(a => a.maqra === m);
+                const last = allAyahs.slice().reverse().find(a => a.maqra === m);
+                optionsHTML += `<option value="${m}">Maqra' ${m} — ${first.surahNum}. ${first.surahName} ${first.ayahNum} - ${last.surahNum}. ${last.surahName} ${last.ayahNum}</option>`;
+            }
+            fromSelect.innerHTML = optionsHTML;
+            toSelect.innerHTML = optionsHTML;
+            fromSelect.value = "1";
+            toSelect.value = "2";
+        } else if (currentMode === 'juz') {
+            for (let j = 1; j <= 30; j++) {
+                const first = allAyahs.find(a => a.juz === j);
+                const last = allAyahs.slice().reverse().find(a => a.juz === j);
+                optionsHTML += `<option value="${j}">Juz ${j} — ${first.surahNum}. ${first.surahName} ${first.ayahNum} - ${last.surahNum}. ${last.surahName} ${last.ayahNum}</option>`;
+            }
+            fromSelect.innerHTML = optionsHTML;
+            toSelect.innerHTML = optionsHTML;
+            fromSelect.value = "1";
+            toSelect.value = "2";
         }
+
+        // update quick jump placeholder per mode
+        const jumpInput = document.getElementById('jump-input');
+        if (currentMode === 'ayah') jumpInput.placeholder = 'e.g. 18:10 (surah:ayah)';
+        else if (currentMode === 'page') jumpInput.placeholder = 'Page number (1-604)';
+        else if (currentMode === 'maqra') jumpInput.placeholder = "Maqra' number (1-240)";
+        else if (currentMode === 'juz') jumpInput.placeholder = 'Juz number (1-30)';
     }
 
     function checkOrder(triggeredBy = 'from') {
@@ -499,6 +605,10 @@
             const fromPage = parseInt(fromSelect.value);
             const toPage = parseInt(toSelect.value);
             if (fromPage > toPage && triggeredBy === 'from') toSelect.value = fromSelect.value;
+        } else if (currentMode === 'maqra' || currentMode === 'juz') {
+            const fromVal = parseInt(fromSelect.value);
+            const toVal = parseInt(toSelect.value);
+            if (fromVal > toVal && triggeredBy === 'from') toSelect.value = fromSelect.value;
         }
     }
 
@@ -510,19 +620,59 @@
         const fromValue = document.getElementById('from-verse').value;
         if (!fromValue || allAyahs.length === 0) return;
 
-        let startAyah = currentMode === 'ayah' 
-            ? allAyahs.find(a => a.value === fromValue)
-            : allAyahs.find(a => a.page === parseInt(fromValue));
+        let startAyah;
+        if (currentMode === 'ayah') startAyah = allAyahs.find(a => a.value === fromValue);
+        else if (currentMode === 'page') startAyah = allAyahs.find(a => a.page === parseInt(fromValue));
+        else if (currentMode === 'maqra') startAyah = allAyahs.find(a => a.maqra === parseInt(fromValue));
+        else if (currentMode === 'juz') startAyah = allAyahs.find(a => a.juz === parseInt(fromValue));
+        if (!startAyah) return;
 
         let endAyah = startAyah;
 
         if (mode === 'page') endAyah = allAyahs.slice().reverse().find(a => a.page === startAyah.page);
         else if (mode === 'surah') endAyah = allAyahs.slice().reverse().find(a => a.surahNum === startAyah.surahNum);
         else if (mode === 'juz') endAyah = allAyahs.slice().reverse().find(a => a.juz === startAyah.juz);
-        else if (mode === 'quran') endAyah = allAyahs[allAyahs.length - 1]; 
+        else if (mode === 'maqra') endAyah = allAyahs.slice().reverse().find(a => a.maqra === startAyah.maqra);
+        else if (mode === 'quran') endAyah = allAyahs[allAyahs.length - 1];
 
         if (currentMode === 'ayah') document.getElementById('to-verse').value = endAyah.value;
-        else document.getElementById('to-verse').value = endAyah.page.toString();
+        else if (currentMode === 'page') document.getElementById('to-verse').value = endAyah.page.toString();
+        else if (currentMode === 'maqra') document.getElementById('to-verse').value = endAyah.maqra.toString();
+        else if (currentMode === 'juz') document.getElementById('to-verse').value = endAyah.juz.toString();
+    }
+
+    // --- Quick Jump ---
+    function jumpGo() {
+        const raw = document.getElementById('jump-input').value.trim();
+        if (!raw) return;
+        const fromSelect = document.getElementById('from-verse');
+        const toSelect = document.getElementById('to-verse');
+        let target = null;
+
+        if (currentMode === 'ayah') {
+            const m = raw.match(/^(\d+):(\d+)$/);
+            if (m) {
+                const val = `${parseInt(m[1])}:${parseInt(m[2])}`;
+                if (allAyahs.some(a => a.value === val)) target = val;
+            }
+        } else if (currentMode === 'page') {
+            const n = parseInt(raw);
+            if (n >= 1 && n <= 604 && allPages.some(p => p.value === n.toString())) target = n.toString();
+        } else if (currentMode === 'maqra') {
+            const n = parseInt(raw);
+            if (n >= 1 && n <= 240 && allAyahs.some(a => a.maqra === n)) target = n.toString();
+        } else if (currentMode === 'juz') {
+            const n = parseInt(raw);
+            if (n >= 1 && n <= 30 && allAyahs.some(a => a.juz === n)) target = n.toString();
+        }
+
+        if (target === null) {
+            alert('Invalid jump target for current mode.');
+            return;
+        }
+        fromSelect.value = target;
+        toSelect.value = target;
+        checkOrder();
     }
 
     function selectSegmented(element) {
@@ -574,6 +724,7 @@
             audioPlayer.ontimeupdate = null; 
             playBtn.innerText = "Play Recitation";
             playBtn.classList.remove('playing');
+            document.getElementById('now-playing').innerHTML = 'Not playing';
             return;
         }
 
@@ -584,10 +735,18 @@
         if (currentMode === 'ayah') {
             startIndex = allAyahs.findIndex(a => a.value === fromValue);
             endIndex = allAyahs.findIndex(a => a.value === toValue);
-        } else {
+        } else if (currentMode === 'page') {
             startIndex = allAyahs.findIndex(a => a.page === parseInt(fromValue));
             endIndex = allAyahs.slice().reverse().findIndex(a => a.page === parseInt(toValue));
-            endIndex = (allAyahs.length - 1) - endIndex; 
+            endIndex = (allAyahs.length - 1) - endIndex;
+        } else if (currentMode === 'maqra') {
+            startIndex = allAyahs.findIndex(a => a.maqra === parseInt(fromValue));
+            endIndex = allAyahs.slice().reverse().findIndex(a => a.maqra === parseInt(toValue));
+            endIndex = (allAyahs.length - 1) - endIndex;
+        } else if (currentMode === 'juz') {
+            startIndex = allAyahs.findIndex(a => a.juz === parseInt(fromValue));
+            endIndex = allAyahs.slice().reverse().findIndex(a => a.juz === parseInt(toValue));
+            endIndex = (allAyahs.length - 1) - endIndex;
         }
 
         const selectedAyahs = allAyahs.slice(startIndex, endIndex + 1);
@@ -644,7 +803,10 @@
         }
 
         const currentVerse = playlist[currentAyahIndex];
-        
+
+        document.getElementById('now-playing').innerHTML =
+            `<b>${currentVerse.surahName}</b> — Ayah ${currentVerse.ayahNum}<span class="np-sub">Juz ${currentVerse.juz} · Page ${currentVerse.page}</span>`;
+
         if (audioPlayer.src !== currentVerse.audio_url) {
             audioPlayer.src = currentVerse.audio_url;
             audioPlayer.load();
