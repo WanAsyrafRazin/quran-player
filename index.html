@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quran Player UI</title>
+    <title>Maher al Muaiqly Player</title>
     <style>
         /* General Styles */
         body {
@@ -41,7 +41,7 @@
             border-radius: 16px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
             margin-bottom: 24px;
-            overflow: hidden; /* Important for rounding list item edges */
+            overflow: hidden;
         }
 
         /* Top Adjust End Verse Control */
@@ -54,7 +54,7 @@
         .adjust-control {
             display: flex;
             justify-content: space-between;
-            background-color: #3F5E68; /* Matching panel bg */
+            background-color: #3F5E68;
         }
 
         .adjust-option {
@@ -88,37 +88,45 @@
             justify-content: space-between;
             align-items: center;
             padding: 14px 20px;
-            cursor: pointer;
-            text-decoration: none;
-            color: #1A1A1A;
-            transition: background-color 0.2s;
-        }
-
-        .verse-item:hover {
-            background-color: #F2F4F7;
-        }
-
-        .verse-item:first-child {
             border-bottom: 1px solid #EAECEF;
+        }
+
+        .verse-item:last-child {
+            border-bottom: none;
         }
 
         .verse-label {
             font-weight: 600;
             font-size: 16px;
-            width: 80px; /* Aligns "From" and "To" labels */
+            width: 60px; 
         }
 
-        .verse-selection {
+        /* Dropdown Styles */
+        .verse-select {
+            flex: 1;
             font-size: 15px;
             color: #8E919D;
-            font-weight: 400;
+            font-weight: 500;
+            border: none;
+            background: transparent;
+            outline: none;
+            cursor: pointer;
+            text-align: right;
+            direction: rtl; /* Aligns dropdown arrow nicely */
+            appearance: none; /* Removes default OS styling for clean look */
+            -webkit-appearance: none;
+        }
+
+        .verse-select-container {
             display: flex;
             align-items: center;
+            flex: 1;
+            justify-content: flex-end;
         }
 
         .chevron-right {
-            width: 14px;
-            height: 14px;
+            width: 8px;
+            height: 8px;
             border-top: 2px solid #D2D4DB;
             border-right: 2px solid #D2D4DB;
             transform: rotate(45deg);
@@ -154,6 +162,26 @@
             color: #1A1A1A;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
         }
+
+        /* Play Button */
+        .play-button {
+            width: 100%;
+            background-color: #3F5E68;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 16px;
+            padding: 16px 0;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(63, 94, 104, 0.3);
+            transition: background-color 0.2s;
+            margin-top: 10px;
+        }
+
+        .play-button:hover {
+            background-color: #2E454D;
+        }
     </style>
 </head>
 <body>
@@ -163,10 +191,10 @@
     <div class="section-header">ADJUST END VERSE TO THE END OF THE</div>
     <div class="section-panel adjust-panel">
         <div class="adjust-control" id="end-verse-selector">
-            <button class="adjust-option selected" onclick="selectAdjust(this)">Page</button>
-            <button class="adjust-option" onclick="selectAdjust(this)">Surah</button>
-            <button class="adjust-option" onclick="selectAdjust(this)">Juz'</button>
-            <button class="adjust-option" onclick="selectAdjust(this)">Quran</button>
+            <button class="adjust-option selected" onclick="selectAdjust(this, 'page')">Page</button>
+            <button class="adjust-option" onclick="selectAdjust(this, 'surah')">Surah</button>
+            <button class="adjust-option" onclick="selectAdjust(this, 'juz')">Juz'</button>
+            <button class="adjust-option" onclick="selectAdjust(this, 'quran')">Quran</button>
         </div>
     </div>
 
@@ -175,11 +203,21 @@
     <div class="section-panel verses-panel">
         <div class="verse-item">
             <div class="verse-label">From</div>
-            <div class="verse-selection">1. Al-Fātihah - Ayah 1 <span class="chevron-right"></span></div>
+            <div class="verse-select-container">
+                <select id="from-verse" class="verse-select">
+                    <option>Loading...</option>
+                </select>
+                <span class="chevron-right"></span>
+            </div>
         </div>
         <div class="verse-item">
             <div class="verse-label">To</div>
-            <div class="verse-selection">1. Al-Fātihah - Ayah 7 <span class="chevron-right"></span></div>
+            <div class="verse-select-container">
+                <select id="to-verse" class="verse-select">
+                    <option>Loading...</option>
+                </select>
+                <span class="chevron-right"></span>
+            </div>
         </div>
     </div>
 
@@ -187,119 +225,125 @@
     <div class="section-header">PLAY EACH VERSE</div>
     <div class="section-panel">
         <div class="segmented-control" id="each-verse-repeat">
-            <button class="seg-option selected" onclick="selectSegmented(this)">1 time</button>
-            <button class="seg-option" onclick="selectSegmented(this)">2 times</button>
-            <button class="seg-option" onclick="selectSegmented(this)">3 times</button>
-            <button class="seg-option" onclick="selectSegmented(this)">loop</button>
+            <button class="seg-option selected" data-val="1" onclick="selectSegmented(this)">1 time</button>
+            <button class="seg-option" data-val="2" onclick="selectSegmented(this)">2 times</button>
+            <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
+            <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
         </div>
-        <div style="height: 10px;"></div> <!-- Bottom padding -->
+        <div style="height: 10px;"></div>
     </div>
 
     <!-- Play Set of Verses Section -->
     <div class="section-header">PLAY SET OF VERSES</div>
     <div class="section-panel">
         <div class="segmented-control" id="set-verses-repeat">
-            <button class="seg-option selected" onclick="selectSegmented(this)">1 time</button>
-            <button class="seg-option" onclick="selectSegmented(this)">2 times</button>
-            <button class="seg-option" onclick="selectSegmented(this)">3 times</button>
-            <button class="seg-option" onclick="selectSegmented(this)">loop</button>
+            <button class="seg-option selected" data-val="1" onclick="selectSegmented(this)">1 time</button>
+            <button class="seg-option" data-val="2" onclick="selectSegmented(this)">2 times</button>
+            <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
+            <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
         </div>
-        <div style="height: 10px;"></div> <!-- Bottom padding -->
+        <div style="height: 10px;"></div>
     </div>
+
+    <!-- Play Button -->
+    <button class="play-button" onclick="startRecitation()">Play Recitation</button>
 </div>
 
 <script>
-    // Function to handle selection for the top adjustment control
-    function selectAdjust(element) {
-        // Find all buttons in the same container and remove 'selected' class
+    let quranMetadata = [];
+
+    // 1. Load all Surahs and their Ayah counts when the page opens
+    async function loadQuranData() {
+        try {
+            const response = await fetch('https://api.alquran.cloud/v1/surah');
+            const data = await response.json();
+            quranMetadata = data.data;
+            populateDropdowns();
+        } catch (error) {
+            console.error("Error loading Quran data:", error);
+            document.getElementById('from-verse').innerHTML = `<option>Error loading data</option>`;
+        }
+    }
+
+    // 2. Fill the dropdowns with all 6,236 verses
+    function populateDropdowns() {
+        const fromSelect = document.getElementById('from-verse');
+        const toSelect = document.getElementById('to-verse');
+        let optionsHTML = '';
+
+        quranMetadata.forEach(surah => {
+            for (let i = 1; i <= surah.numberOfAyahs; i++) {
+                // We use surahNumber:ayahNumber as the hidden value (e.g. "1:7")
+                optionsHTML += `<option value="${surah.number}:${i}">${surah.number}. ${surah.englishName} - Ayah ${i}</option>`;
+            }
+        });
+
+        fromSelect.innerHTML = optionsHTML;
+        toSelect.innerHTML = optionsHTML;
+
+        // Set Default selection to match your image
+        fromSelect.value = "1:1";
+        toSelect.value = "1:7";
+    }
+
+    // 3. Logic for the "ADJUST END VERSE" buttons
+    function selectAdjust(element, mode) {
+        // Handle visual selection
         const parent = element.parentElement;
         parent.querySelectorAll('.adjust-option').forEach(btn => btn.classList.remove('selected'));
-        // Add 'selected' class to the clicked button
         element.classList.add('selected');
+
+        // Handle the logic of updating the 'To' dropdown
+        const fromValue = document.getElementById('from-verse').value;
+        if (!fromValue || quranMetadata.length === 0) return;
+
+        // Split the "From" value (e.g., "2:5" becomes surah 2, ayah 5)
+        const [surahNum, ayahNum] = fromValue.split(':').map(Number);
+        const toSelect = document.getElementById('to-verse');
+
+        if (mode === 'surah') {
+            // Find how many ayahs are in the currently selected Surah
+            const surahInfo = quranMetadata.find(s => s.number === surahNum);
+            // Set 'To' to the last ayah of this surah
+            toSelect.value = `${surahNum}:${surahInfo.numberOfAyahs}`;
+        } 
+        else if (mode === 'quran') {
+            // Set 'To' to the very last ayah of the Quran (Surah 114, Ayah 6)
+            toSelect.value = `114:6`;
+        }
+        else if (mode === 'page' || mode === 'juz') {
+            alert(`The exact ${mode} mapping requires a larger database, but you can build this by fetching page/juz endpoints!`);
+        }
     }
 
-    // Function to handle selection for the segmented controls (repeat settings)
+    // 4. Logic for Repeat Buttons (Visual only for now)
     function selectSegmented(element) {
-        // Find all buttons in the same container and remove 'selected' class
         const parent = element.parentElement;
         parent.querySelectorAll('.seg-option').forEach(btn => btn.classList.remove('selected'));
-        // Add 'selected' class to the clicked button
         element.classList.add('selected');
     }
 
-    // -----------------------------------------
-    // 2. The Audio Engine (From step 1)
-    // -----------------------------------------
-    let playlist = [];
-    let currentAyahIndex = 0;
-    let currentAyahRepeatCount = 1;
-    let currentRangeRepeatCount = 1;
-    let audioPlayer = new Audio();
+    // 5. Trigger when Play button is clicked
+    function startRecitation() {
+        const fromAyah = document.getElementById('from-verse').value;
+        const toAyah = document.getElementById('to-verse').value;
+        
+        // Find which repeat buttons are currently selected
+        const ayahRepeat = document.querySelector('#each-verse-repeat .selected').getAttribute('data-val');
+        const setRepeat = document.querySelector('#set-verses-repeat .selected').getAttribute('data-val');
 
-    async function startRecitation() {
-        const startPage = parseInt(document.getElementById('start-page').value);
-        const endPage = parseInt(document.getElementById('end-page').value);
-  
-        // Clear any existing playlist
-        playlist = [];
-  
-        // 1. Fetch pages and build the playlist array
-        for (let page = startPage; page <= endPage; page++) {
-          // Fetch page data specifically for Maher al Muaiqly
-          const response = await fetch(`https://api.alquran.cloud/v1/page/${page}/ar.mahermuaiqly`);
-          const data = await response.json();
-    
-          // Extract audio URLs and add them to our playlist
-          data.data.ayahs.forEach(ayah => {
-             playlist.push(ayah.audio);
-          });
-        }
-
-        // 2. Reset counters and start playing
-        currentAyahIndex = 0;
-        currentAyahRepeatCount = 1;
-        currentRangeRepeatCount = 1;
-  
-        playCurrentVerse();
+        console.log(`Starting Maher Al Muaiqly Recitation...`);
+        console.log(`Playing From: ${fromAyah}, To: ${toAyah}`);
+        console.log(`Repeating each verse: ${ayahRepeat} times`);
+        console.log(`Repeating set: ${setRepeat} times`);
+        
+        alert("Check your browser console to see the engine variables ready to be passed to the audio player!");
+        
+        // This is where you will connect the Audio Engine logic from Step 1
     }
 
-    function playCurrentVerse() {
-        if (playlist.length === 0) return;
-        audioPlayer.src = playlist[currentAyahIndex];
-        audioPlayer.play();
-    }
-
-    audioPlayer.onended = () => {
-        const targetAyahRepeats = parseInt(document.getElementById('ayah-repeats').value);
-        const targetRangeRepeats = parseInt(document.getElementById('range-repeats').value);
-
-        // Check if we need to repeat the current verse again
-        if (currentAyahRepeatCount < targetAyahRepeats) {
-          currentAyahRepeatCount++;
-          playCurrentVerse();
-          return; // Stop here until the verse ends again
-        }
-
-        // If verse is done repeating, reset verse counter and move to the next verse
-        currentAyahRepeatCount = 1; 
-        currentAyahIndex++;
-
-        // Check if we are still within the playlist limits
-        if (currentAyahIndex < playlist.length) {
-          playCurrentVerse();
-          return;
-        }
-
-        // If we finished the playlist, check if we need to repeat the whole selected range
-        if (currentRangeRepeatCount < targetRangeRepeats) {
-          currentRangeRepeatCount++;
-          currentAyahIndex = 0; // Go back to the very first verse in the selection
-          playCurrentVerse();
-        } else {
-          console.log("Recitation complete!");
-          // You could update your UI here to show playback has finished
-        }
-    };
+    // Initialize the app by fetching the data
+    loadQuranData();
 </script>
 
 </body>
