@@ -1,5 +1,5 @@
 // Quran Player Service Worker — offline support
-const CACHE = 'quran-player-v1';
+const CACHE = 'quran-player-v2';
 const SHELL = [
   './',
   './index.html',
@@ -7,8 +7,8 @@ const SHELL = [
   './surah_structure.json',
   './murattal_timestamps.json',
   './mujawwad_timestamps.json',
-  './icon-192.png',
-  './icon-512.png'
+  './icon-192-v2.png',
+  './icon-512-v2.png'
 ];
 const AUDIO_RE = /mirrors\.quranicaudio\.com|server12\.mp3quran\.net|download\.quranicaudio\.com/;
 
