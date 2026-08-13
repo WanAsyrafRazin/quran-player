@@ -182,11 +182,6 @@
         .segmented-control.mode-select .seg-option {
             flex: 0 0 calc((100% - 12px) / 3);
         }
-        .segmented-control.recitation-select {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 6px;
-        }
 
         .seg-option {
             flex: 1;
@@ -567,10 +562,8 @@
 
     <div class="section-header">RECITATION VERSION</div>
     <div class="section-panel">
-        <div class="segmented-control recitation-select" id="recitation-selector">
-            <button class="seg-option" data-file="murattal_timestamps.json" onclick="setRecitation(this, 'murattal_timestamps.json')">Murattal Official</button>
-            <button class="seg-option" data-file="murattal_hybrid_timestamps.json" onclick="setRecitation(this, 'murattal_hybrid_timestamps.json')">Murattal Hybrid</button>
-            <button class="seg-option" data-file="murattal_whisper_timestamps.json" onclick="setRecitation(this, 'murattal_whisper_timestamps.json')">Murattal Whisper</button>
+        <div class="segmented-control" id="recitation-selector">
+            <button class="seg-option" data-file="murattal_timestamps.json" onclick="setRecitation(this, 'murattal_timestamps.json')">Murattal (fast)</button>
             <button class="seg-option" data-file="mujawwad_timestamps.json" onclick="setRecitation(this, 'mujawwad_timestamps.json')">Mujawwad</button>
         </div>
         <div style="height: 10px;"></div>
@@ -634,9 +627,9 @@
     let localTimestampDB = {}; // NEW: Stores our local JSON data
     let playbackSpeed = parseFloat(localStorage.getItem('quran_player_speed')) || 1;
     if (playbackSpeed < 0.5 || playbackSpeed > 1.5) playbackSpeed = 1;
-    const VALID_RECITATIONS = ['murattal_timestamps.json', 'murattal_hybrid_timestamps.json', 'murattal_whisper_timestamps.json', 'mujawwad_timestamps.json'];
+    const VALID_RECITATIONS = ['murattal_timestamps.json', 'mujawwad_timestamps.json'];
     const savedRecitation = localStorage.getItem('quran_player_recitation');
-    let recitationFile = VALID_RECITATIONS.includes(savedRecitation) ? savedRecitation : 'murattal_hybrid_timestamps.json';
+    let recitationFile = VALID_RECITATIONS.includes(savedRecitation) ? savedRecitation : 'murattal_timestamps.json';
     
     // --- 2. Gapless A-B Engine Variables ---
     let isPlaying = false;

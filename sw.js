@@ -1,13 +1,11 @@
 // Quran Player Service Worker — offline support
-const CACHE = 'quran-player-v3';
+const CACHE = 'quran-player-v4';
 const SHELL = [
   './',
   './index.html',
   './manifest.json',
   './surah_structure.json',
   './murattal_timestamps.json',
-  './murattal_hybrid_timestamps.json',
-  './murattal_whisper_timestamps.json',
   './mujawwad_timestamps.json',
   './icon-192-v2.png',
   './icon-512-v2.png'
