@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quran Player UI</title>
+    <style>
+        /* General Styles */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #F6F7FA;
+            color: #1A1A1A;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .player-container {
+            width: 100%;
+            max-width: 400px;
+            background-color: transparent;
+            border-radius: 20px;
+            padding: 20px 0;
+        }
+
+        /* Section Header Styles */
+        .section-header {
+            text-transform: uppercase;
+            font-size: 13px;
+            color: #8E919D;
+            font-weight: 600;
+            margin-bottom: 8px;
+            margin-left: 20px;
+        }
+
+        .section-panel {
+            background-color: #FFFFFF;
+            border-radius: 16px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+            margin-bottom: 24px;
+            overflow: hidden; /* Important for rounding list item edges */
+        }
+
+        /* Top Adjust End Verse Control */
+        .adjust-panel {
+            background-color: #3F5E68;
+            padding: 10px;
+            border-radius: 18px;
+        }
+
+        .adjust-control {
+            display: flex;
+            justify-content: space-between;
+            background-color: #3F5E68; /* Matching panel bg */
+        }
+
+        .adjust-option {
+            background-color: transparent;
+            color: rgba(255, 255, 255, 0.8);
+            border: none;
+            border-radius: 14px;
+            padding: 10px 18px;
+            font-weight: 500;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .adjust-option:hover {
+            color: #FFFFFF;
+        }
+
+        .adjust-option.selected {
+            background-color: #FFFFFF;
+            color: #3F5E68;
+        }
+
+        /* Playing Verses List Styles */
+        .verses-panel {
+            padding: 8px 0;
+        }
+
+        .verse-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 20px;
+            cursor: pointer;
+            text-decoration: none;
+            color: #1A1A1A;
+            transition: background-color 0.2s;
+        }
+
+        .verse-item:hover {
+            background-color: #F2F4F7;
+        }
+
+        .verse-item:first-child {
+            border-bottom: 1px solid #EAECEF;
+        }
+
+        .verse-label {
+            font-weight: 600;
+            font-size: 16px;
+            width: 80px; /* Aligns "From" and "To" labels */
+        }
+
+        .verse-selection {
+            font-size: 15px;
+            color: #8E919D;
+            font-weight: 400;
+            display: flex;
+            align-items: center;
+        }
+
+        .chevron-right {
+            width: 14px;
+            height: 14px;
+            border-top: 2px solid #D2D4DB;
+            border-right: 2px solid #D2D4DB;
+            transform: rotate(45deg);
+            display: inline-block;
+            margin-left: 10px;
+        }
+
+        /* Segmented Controls (Repeat Settings) */
+        .segmented-control {
+            display: flex;
+            background-color: #F0F2F5;
+            padding: 3px;
+            border-radius: 12px;
+            margin: 0 20px;
+        }
+
+        .seg-option {
+            flex: 1;
+            background-color: transparent;
+            color: #1A1A1A;
+            border: none;
+            border-radius: 10px;
+            padding: 11px 0;
+            font-weight: 500;
+            font-size: 15px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .seg-option.selected {
+            background-color: #FFFFFF;
+            color: #1A1A1A;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body>
+
+<div class="player-container">
+    <!-- Adjust End Verse Section -->
+    <div class="section-header">ADJUST END VERSE TO THE END OF THE</div>
+    <div class="section-panel adjust-panel">
+        <div class="adjust-control" id="end-verse-selector">
+            <button class="adjust-option selected" onclick="selectAdjust(this)">Page</button>
+            <button class="adjust-option" onclick="selectAdjust(this)">Surah</button>
+            <button class="adjust-option" onclick="selectAdjust(this)">Juz'</button>
+            <button class="adjust-option" onclick="selectAdjust(this)">Quran</button>
+        </div>
+    </div>
+
+    <!-- Playing Verses Section -->
+    <div class="section-header">PLAYING VERSES</div>
+    <div class="section-panel verses-panel">
+        <div class="verse-item">
+            <div class="verse-label">From</div>
+            <div class="verse-selection">1. Al-Fātihah - Ayah 1 <span class="chevron-right"></span></div>
+        </div>
+        <div class="verse-item">
+            <div class="verse-label">To</div>
+            <div class="verse-selection">1. Al-Fātihah - Ayah 7 <span class="chevron-right"></span></div>
+        </div>
+    </div>
+
+    <!-- Play Each Verse Section -->
+    <div class="section-header">PLAY EACH VERSE</div>
+    <div class="section-panel">
+        <div class="segmented-control" id="each-verse-repeat">
+            <button class="seg-option selected" onclick="selectSegmented(this)">1 time</button>
+            <button class="seg-option" onclick="selectSegmented(this)">2 times</button>
+            <button class="seg-option" onclick="selectSegmented(this)">3 times</button>
+            <button class="seg-option" onclick="selectSegmented(this)">loop</button>
+        </div>
+        <div style="height: 10px;"></div> <!-- Bottom padding -->
+    </div>
+
+    <!-- Play Set of Verses Section -->
+    <div class="section-header">PLAY SET OF VERSES</div>
+    <div class="section-panel">
+        <div class="segmented-control" id="set-verses-repeat">
+            <button class="seg-option selected" onclick="selectSegmented(this)">1 time</button>
+            <button class="seg-option" onclick="selectSegmented(this)">2 times</button>
+            <button class="seg-option" onclick="selectSegmented(this)">3 times</button>
+            <button class="seg-option" onclick="selectSegmented(this)">loop</button>
+        </div>
+        <div style="height: 10px;"></div> <!-- Bottom padding -->
+    </div>
+</div>
+
+<script>
+    // Function to handle selection for the top adjustment control
+    function selectAdjust(element) {
+        // Find all buttons in the same container and remove 'selected' class
+        const parent = element.parentElement;
+        parent.querySelectorAll('.adjust-option').forEach(btn => btn.classList.remove('selected'));
+        // Add 'selected' class to the clicked button
+        element.classList.add('selected');
+    }
+
+    // Function to handle selection for the segmented controls (repeat settings)
+    function selectSegmented(element) {
+        // Find all buttons in the same container and remove 'selected' class
+        const parent = element.parentElement;
+        parent.querySelectorAll('.seg-option').forEach(btn => btn.classList.remove('selected'));
+        // Add 'selected' class to the clicked button
+        element.classList.add('selected');
+    }
+
+    // -----------------------------------------
+    // 2. The Audio Engine (From step 1)
+    // -----------------------------------------
+    let playlist = [];
+    let currentAyahIndex = 0;
+    let currentAyahRepeatCount = 1;
+    let currentRangeRepeatCount = 1;
+    let audioPlayer = new Audio();
+
+    async function startRecitation() {
+        const startPage = parseInt(document.getElementById('start-page').value);
+        const endPage = parseInt(document.getElementById('end-page').value);
+  
+        // Clear any existing playlist
+        playlist = [];
+  
+        // 1. Fetch pages and build the playlist array
+        for (let page = startPage; page <= endPage; page++) {
+          // Fetch page data specifically for Maher al Muaiqly
+          const response = await fetch(`https://api.alquran.cloud/v1/page/${page}/ar.mahermuaiqly`);
+          const data = await response.json();
+    
+          // Extract audio URLs and add them to our playlist
+          data.data.ayahs.forEach(ayah => {
+             playlist.push(ayah.audio);
+          });
+        }
+
+        // 2. Reset counters and start playing
+        currentAyahIndex = 0;
+        currentAyahRepeatCount = 1;
+        currentRangeRepeatCount = 1;
+  
+        playCurrentVerse();
+    }
+
+    function playCurrentVerse() {
+        if (playlist.length === 0) return;
+        audioPlayer.src = playlist[currentAyahIndex];
+        audioPlayer.play();
+    }
+
+    audioPlayer.onended = () => {
+        const targetAyahRepeats = parseInt(document.getElementById('ayah-repeats').value);
+        const targetRangeRepeats = parseInt(document.getElementById('range-repeats').value);
+
+        // Check if we need to repeat the current verse again
+        if (currentAyahRepeatCount < targetAyahRepeats) {
+          currentAyahRepeatCount++;
+          playCurrentVerse();
+          return; // Stop here until the verse ends again
+        }
+
+        // If verse is done repeating, reset verse counter and move to the next verse
+        currentAyahRepeatCount = 1; 
+        currentAyahIndex++;
+
+        // Check if we are still within the playlist limits
+        if (currentAyahIndex < playlist.length) {
+          playCurrentVerse();
+          return;
+        }
+
+        // If we finished the playlist, check if we need to repeat the whole selected range
+        if (currentRangeRepeatCount < targetRangeRepeats) {
+          currentRangeRepeatCount++;
+          currentAyahIndex = 0; // Go back to the very first verse in the selection
+          playCurrentVerse();
+        } else {
+          console.log("Recitation complete!");
+          // You could update your UI here to show playback has finished
+        }
+    };
+</script>
+
+</body>
+</html>
