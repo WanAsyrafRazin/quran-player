@@ -368,6 +368,7 @@
             <button class="seg-option selected" onclick="changeMode(this, 'ayah')">By Ayah</button>
             <button class="seg-option" onclick="changeMode(this, 'page')">By Page</button>
             <button class="seg-option" onclick="changeMode(this, 'maqra')">By Maqra'</button>
+            <button class="seg-option" onclick="changeMode(this, 'surah')">By Surah</button>
             <button class="seg-option" onclick="changeMode(this, 'juz')">By Juz</button>
         </div>
     </div>
@@ -573,6 +574,16 @@
             toSelect.innerHTML = optionsHTML;
             fromSelect.value = "1";
             toSelect.value = "2";
+        } else if (currentMode === 'surah') {
+            for (let s = 1; s <= 114; s++) {
+                const first = allAyahs.find(a => a.surahNum === s);
+                const last = allAyahs.slice().reverse().find(a => a.surahNum === s);
+                optionsHTML += `<option value="${s}">${first.surahNum}. ${first.surahName} (${first.ayahNum} - ${last.ayahNum})</option>`;
+            }
+            fromSelect.innerHTML = optionsHTML;
+            toSelect.innerHTML = optionsHTML;
+            fromSelect.value = "1";
+            toSelect.value = "2";
         } else if (currentMode === 'juz') {
             for (let j = 1; j <= 30; j++) {
                 const first = allAyahs.find(a => a.juz === j);
@@ -590,6 +601,7 @@
         if (currentMode === 'ayah') jumpInput.placeholder = 'e.g. 18:10 (surah:ayah)';
         else if (currentMode === 'page') jumpInput.placeholder = 'Page number (1-604)';
         else if (currentMode === 'maqra') jumpInput.placeholder = "Maqra' number (1-240)";
+        else if (currentMode === 'surah') jumpInput.placeholder = 'Surah number (1-114)';
         else if (currentMode === 'juz') jumpInput.placeholder = 'Juz number (1-30)';
     }
 
@@ -605,7 +617,7 @@
             const fromPage = parseInt(fromSelect.value);
             const toPage = parseInt(toSelect.value);
             if (fromPage > toPage && triggeredBy === 'from') toSelect.value = fromSelect.value;
-        } else if (currentMode === 'maqra' || currentMode === 'juz') {
+        } else if (currentMode === 'maqra' || currentMode === 'surah' || currentMode === 'juz') {
             const fromVal = parseInt(fromSelect.value);
             const toVal = parseInt(toSelect.value);
             if (fromVal > toVal && triggeredBy === 'from') toSelect.value = fromSelect.value;
@@ -624,6 +636,7 @@
         if (currentMode === 'ayah') startAyah = allAyahs.find(a => a.value === fromValue);
         else if (currentMode === 'page') startAyah = allAyahs.find(a => a.page === parseInt(fromValue));
         else if (currentMode === 'maqra') startAyah = allAyahs.find(a => a.maqra === parseInt(fromValue));
+        else if (currentMode === 'surah') startAyah = allAyahs.find(a => a.surahNum === parseInt(fromValue));
         else if (currentMode === 'juz') startAyah = allAyahs.find(a => a.juz === parseInt(fromValue));
         if (!startAyah) return;
 
@@ -638,6 +651,7 @@
         if (currentMode === 'ayah') document.getElementById('to-verse').value = endAyah.value;
         else if (currentMode === 'page') document.getElementById('to-verse').value = endAyah.page.toString();
         else if (currentMode === 'maqra') document.getElementById('to-verse').value = endAyah.maqra.toString();
+        else if (currentMode === 'surah') document.getElementById('to-verse').value = endAyah.surahNum.toString();
         else if (currentMode === 'juz') document.getElementById('to-verse').value = endAyah.juz.toString();
     }
 
@@ -661,6 +675,9 @@
         } else if (currentMode === 'maqra') {
             const n = parseInt(raw);
             if (n >= 1 && n <= 240 && allAyahs.some(a => a.maqra === n)) target = n.toString();
+        } else if (currentMode === 'surah') {
+            const n = parseInt(raw);
+            if (n >= 1 && n <= 114 && allAyahs.some(a => a.surahNum === n)) target = n.toString();
         } else if (currentMode === 'juz') {
             const n = parseInt(raw);
             if (n >= 1 && n <= 30 && allAyahs.some(a => a.juz === n)) target = n.toString();
@@ -742,6 +759,10 @@
         } else if (currentMode === 'maqra') {
             startIndex = allAyahs.findIndex(a => a.maqra === parseInt(fromValue));
             endIndex = allAyahs.slice().reverse().findIndex(a => a.maqra === parseInt(toValue));
+            endIndex = (allAyahs.length - 1) - endIndex;
+        } else if (currentMode === 'surah') {
+            startIndex = allAyahs.findIndex(a => a.surahNum === parseInt(fromValue));
+            endIndex = allAyahs.slice().reverse().findIndex(a => a.surahNum === parseInt(toValue));
             endIndex = (allAyahs.length - 1) - endIndex;
         } else if (currentMode === 'juz') {
             startIndex = allAyahs.findIndex(a => a.juz === parseInt(fromValue));
