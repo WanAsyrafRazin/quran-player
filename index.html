@@ -17,7 +17,7 @@
             background-color: #F6F7FA;
             color: #1A1A1A;
             margin: 0;
-            padding: 20px;
+            padding: 20px 20px 110px 20px;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -395,6 +395,71 @@
             line-height: 1.5;
         }
         body.dark-mode .offline-hint { color: #718096; }
+
+        /* Bottom Transport Bar */
+        .bottom-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            padding: 10px 16px calc(10px + env(safe-area-inset-bottom)) 16px;
+            background: rgba(246, 247, 250, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-top: 1px solid #EAECEF;
+            z-index: 100;
+        }
+        .bottom-bar-inner {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 400px;
+        }
+        .pb-play {
+            flex: 1.5;
+            padding: 14px 10px;
+            border: none;
+            border-radius: 12px;
+            background: #3F5E68;
+            color: #FFFFFF;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .pb-play:hover { background: #334B54; }
+        .pb-play.playing { background: #2B6CB0; }
+        .pb-play.playing:hover { background: #2C5282; }
+        .pb-stop {
+            flex: 1;
+            padding: 14px 10px;
+            border: none;
+            border-radius: 12px;
+            background: #E53E3E;
+            color: #FFFFFF;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .pb-stop:hover { background: #C53030; }
+        .pb-stop:disabled {
+            background: #CBD5E0;
+            color: #A0AEC0;
+            cursor: not-allowed;
+        }
+        body.dark-mode .bottom-bar {
+            background: rgba(17, 23, 32, 0.95);
+            border-top-color: #2D3748;
+        }
+        body.dark-mode .pb-play { background: #2D3748; }
+        body.dark-mode .pb-play:hover { background: #3A4A5C; }
+        body.dark-mode .pb-play.playing { background: #2B6CB0; }
+        body.dark-mode .pb-stop { background: #C53030; }
+        body.dark-mode .pb-stop:hover { background: #9B2C2C; }
+        body.dark-mode .pb-stop:disabled { background: #2D3748; color: #4A5568; }
     </style>
 </head>
 <body>
@@ -522,8 +587,14 @@
             <span>2x</span>
         </div>
     </div>
+</div>
 
-    <button id="play-btn" class="play-button" onclick="togglePlay()">Play Recitation</button>
+<!-- Bottom transport bar (always visible) -->
+<div class="bottom-bar">
+    <div class="bottom-bar-inner">
+        <button id="play-btn" class="pb-play" onclick="togglePlay()">▶ Play</button>
+        <button id="stop-btn" class="pb-stop" onclick="stopPlayback()" disabled>⏹ Stop</button>
+    </div>
 </div>
 
 <script>
@@ -552,6 +623,7 @@
     
     // --- 2. Gapless A-B Engine Variables ---
     let isPlaying = false;
+    let isPaused = false;
     let audioPlayer = new Audio();
     let playlist = []; 
     let currentAyahIndex = 0;
@@ -765,7 +837,7 @@
 
     // --- Recitation Version Selector ---
     function setRecitation(element, file) {
-        if (isPlaying) document.getElementById('play-btn').click();
+        if (isPlaying || isPaused) stopPlayback();
         fetch(file)
             .then(r => r.json())
             .then(data => {
@@ -801,12 +873,24 @@
         const playBtn = document.getElementById('play-btn');
 
         if (isPlaying) {
+            // playing -> pause (keep position, resume later)
             audioPlayer.pause();
             isPlaying = false;
-            audioPlayer.ontimeupdate = null; 
-            playBtn.innerText = "Play Recitation";
+            isPaused = true;
+            audioPlayer.ontimeupdate = null;
+            playBtn.innerHTML = '▶ Play';
             playBtn.classList.remove('playing');
-            document.getElementById('now-playing').innerHTML = 'Not playing';
+            return;
+        }
+
+        if (isPaused && playlist.length > 0) {
+            // paused -> resume from where we left off
+            audioPlayer.play();
+            isPlaying = true;
+            isPaused = false;
+            audioPlayer.ontimeupdate = handleTimeUpdate;
+            playBtn.innerHTML = '⏸ Pause';
+            playBtn.classList.add('playing');
             return;
         }
 
@@ -850,10 +934,26 @@
         currentRangeRepeatCount = 1;
 
         isPlaying = true;
-        playBtn.innerText = "Stop Recitation";
+        isPaused = false;
+        playBtn.innerHTML = '⏸ Pause';
         playBtn.classList.add('playing');
-        
+        document.getElementById('stop-btn').disabled = false;
+
         playCurrentVerse();
+    }
+
+    function stopPlayback() {
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+        audioPlayer.ontimeupdate = null;
+        isPlaying = false;
+        isPaused = false;
+        currentAyahIndex = 0;
+        playlist = [];
+        document.getElementById('play-btn').innerHTML = '▶ Play';
+        document.getElementById('play-btn').classList.remove('playing');
+        document.getElementById('stop-btn').disabled = true;
+        document.getElementById('now-playing').innerHTML = 'Not playing';
     }
 
     // Reads from local data instead of fetching APIs
@@ -884,7 +984,7 @@
 
     function playCurrentVerse() {
         if (currentAyahIndex >= playlist.length) {
-            document.getElementById('play-btn').click();
+            stopPlayback();
             return;
         }
 
@@ -936,7 +1036,7 @@
                 playCurrentVerse();
                 return;
             } else {
-                document.getElementById('play-btn').click(); 
+                stopPlayback();
                 return;
             }
         }
