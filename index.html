@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maher al Muaiqly Player</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quran Player">
+    <meta name="theme-color" content="#1F3A44">
     <style>
         /* General Styles */
         body {
@@ -341,6 +347,54 @@
         }
         body.dark-mode #jump-go { background: #2D3748; }
         body.dark-mode #jump-go:hover { background: #3A4A5C; }
+
+        /* Offline Mode Styles */
+        .offline-status {
+            text-align: center;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #EDF2F7;
+            color: #2D3748;
+            font-size: 13px;
+            font-weight: 600;
+            margin: 0 20px 10px 20px;
+        }
+        body.dark-mode .offline-status { background: #1A232E; color: #A0AEC0; }
+        .offline-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 0 20px 10px 20px;
+        }
+        .dl-btn {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            background: #3F5E68;
+            color: #FFFFFF;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .dl-btn:hover { background: #334B54; }
+        .dl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        body.dark-mode .dl-btn { background: #2D3748; }
+        body.dark-mode .dl-btn:hover { background: #3A4A5C; }
+        .dl-progress {
+            text-align: center;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #3F5E68;
+        }
+        body.dark-mode .dl-progress { color: #7FB3C9; }
+        .offline-hint {
+            padding: 0 20px 6px 20px;
+            font-size: 12px;
+            color: #8E919D;
+            line-height: 1.5;
+        }
+        body.dark-mode .offline-hint { color: #718096; }
     </style>
 </head>
 <body>
@@ -441,6 +495,17 @@
         <div style="height: 10px;"></div>
     </div>
 
+    <div class="section-header">OFFLINE MODE</div>
+    <div class="section-panel">
+        <div id="offline-status" class="offline-status">Checking offline support...</div>
+        <div class="offline-buttons">
+            <button id="dl-murattal" class="dl-btn" onclick="downloadRecitation('murattal_timestamps.json')">⬇ Download Murattal (fast) — 628 MB</button>
+            <button id="dl-mujawwad" class="dl-btn" onclick="downloadRecitation('mujawwad_timestamps.json')">⬇ Download Mujawwad — 1.3 GB</button>
+        </div>
+        <div id="dl-progress" class="dl-progress" style="display:none;"></div>
+        <div class="offline-hint">💡 <b>Install:</b> iPhone/iPad Safari → Share → <b>Add to Home Screen</b>. Then open the app icon (full-screen, like a native app). Audio is cached automatically whenever you play a surah — or grab everything with the buttons above. Keep the app open while downloading. Works in airplane mode once cached.</div>
+    </div>
+
     <div class="section-header">PLAYBACK SPEED</div>
     <div class="section-panel">
         <div class="segmented-control" id="speed-presets">
@@ -496,8 +561,8 @@
     // Load initial structure AND our local timestamp file on page load
     async function loadQuranData() {
         try {
-            // 1. Fetch Structure
-            const structureRes = await fetch('https://api.alquran.cloud/v1/quran/en.asad');
+            // 1. Fetch Structure (bundled locally for offline use)
+            const structureRes = await fetch('surah_structure.json');
             const data = await structureRes.json();
             
             let currentPage = 0;
@@ -887,6 +952,88 @@
     audioPlayer.onended = () => {
         if (isPlaying) handleVerseEnd();
     };
+
+    // --- Offline Mode (PWA) ---
+    function isAudioUrl(url) {
+        return /mirrors\.quranicaudio\.com|server12\.mp3quran\.net|download\.quranicaudio\.com/.test(url);
+    }
+
+    async function countCachedAudio() {
+        try {
+            const keys = await caches.keys();
+            let n = 0;
+            for (const k of keys) {
+                const c = await caches.open(k);
+                const reqs = await c.keys();
+                n += reqs.filter(r => isAudioUrl(r.url)).length;
+            }
+            return n;
+        } catch (e) { return 0; }
+    }
+
+    async function updateOfflineStatus() {
+        const el = document.getElementById('offline-status');
+        if (!('serviceWorker' in navigator) || !('caches' in window)) {
+            el.textContent = 'Offline mode not supported in this browser.';
+            return;
+        }
+        const n = await countCachedAudio();
+        el.textContent = navigator.onLine
+            ? `● Online — ${n} of 228 audio files cached (playing a surah caches it automatically)`
+            : `● Offline — ${n} audio files cached. Playback works for cached surahs.`;
+    }
+
+    let downloading = false;
+    async function downloadRecitation(recFile) {
+        if (downloading) return;
+        if (!('serviceWorker' in navigator) || !('caches' in window)) {
+            alert('Offline mode is not supported in this browser. Use Safari on iPhone/iPad.');
+            return;
+        }
+        const btnM = document.getElementById('dl-murattal');
+        const btnJ = document.getElementById('dl-mujawwad');
+        const progressEl = document.getElementById('dl-progress');
+        const reg = await navigator.serviceWorker.ready;
+        const res = await fetch(recFile);
+        const db = await res.json();
+        const urls = Object.keys(db).map(k => db[k].audio_url);
+
+        downloading = true;
+        btnM.disabled = true;
+        btnJ.disabled = true;
+        progressEl.style.display = 'block';
+        progressEl.textContent = `Starting download of ${urls.length} surahs...`;
+
+        reg.active.postMessage({ type: 'CACHE_AUDIOS', urls });
+    }
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (e) => {
+            const d = e.data;
+            if (!d) return;
+            const progressEl = document.getElementById('dl-progress');
+            if (d.type === 'CACHE_PROGRESS') {
+                const pct = Math.round(d.done / d.total * 100);
+                progressEl.textContent = `Downloading… ${d.done}/${d.total} (${pct}%) — surah ${d.current.split('/').pop().replace('.mp3','')}`;
+            } else if (d.type === 'CACHE_DONE') {
+                progressEl.textContent = `✅ Done! ${d.done} surahs saved for offline use.`;
+                document.getElementById('dl-murattal').disabled = false;
+                document.getElementById('dl-mujawwad').disabled = false;
+                downloading = false;
+                updateOfflineStatus();
+            }
+        });
+
+        navigator.serviceWorker.register('sw.js')
+            .then(() => {
+                updateOfflineStatus();
+                window.addEventListener('online', updateOfflineStatus);
+                window.addEventListener('offline', updateOfflineStatus);
+            })
+            .catch(err => console.error('SW registration failed:', err));
+    } else {
+        document.getElementById('offline-status').textContent = 'Offline mode not supported in this browser.';
+    }
 
     // Initialize on load
     setSpeed(playbackSpeed); // apply saved playback speed
