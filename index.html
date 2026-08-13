@@ -353,6 +353,16 @@
         <div style="height: 10px;"></div>
     </div>
 
+    <div class="section-header">RECITATION VERSION</div>
+    <div class="section-panel">
+        <div class="segmented-control" id="recitation-selector">
+            <button class="seg-option" data-file="murattal_timestamps.json" onclick="setRecitation(this, 'murattal_timestamps.json')">Murattal (fast)</button>
+            <button class="seg-option" data-file="mujawwad_timestamps.json" onclick="setRecitation(this, 'mujawwad_timestamps.json')">Mujawwad</button>
+            <button class="seg-option" data-file="maher_timestamps.json" onclick="setRecitation(this, 'maher_timestamps.json')">Year 1440</button>
+        </div>
+        <div style="height: 10px;"></div>
+    </div>
+
     <div class="section-header">PLAYBACK SPEED</div>
     <div class="section-panel">
         <div class="segmented-control" id="speed-presets">
@@ -394,6 +404,7 @@
     let localTimestampDB = {}; // NEW: Stores our local JSON data
     let playbackSpeed = parseFloat(localStorage.getItem('quran_player_speed')) || 1;
     if (playbackSpeed < 0.5 || playbackSpeed > 2) playbackSpeed = 1;
+    let recitationFile = localStorage.getItem('quran_player_recitation') || 'murattal_timestamps.json';
     
     // --- 2. Gapless A-B Engine Variables ---
     let isPlaying = false;
@@ -435,7 +446,7 @@
             });
 
             // 2. Fetch our pre-downloaded local timestamp database (INSTANT)
-            const tsRes = await fetch('maher_timestamps.json');
+            const tsRes = await fetch(recitationFile);
             localTimestampDB = await tsRes.json();
             
             populateDropdowns();
@@ -518,6 +529,22 @@
         const parent = element.parentElement;
         parent.querySelectorAll('.seg-option').forEach(btn => btn.classList.remove('selected'));
         element.classList.add('selected');
+    }
+
+    // --- Recitation Version Selector ---
+    function setRecitation(element, file) {
+        if (isPlaying) document.getElementById('play-btn').click();
+        fetch(file)
+            .then(r => r.json())
+            .then(data => {
+                localTimestampDB = data;
+                recitationFile = file;
+                localStorage.setItem('quran_player_recitation', file);
+                document.querySelectorAll('#recitation-selector .seg-option').forEach(btn =>
+                    btn.classList.toggle('selected', btn.dataset.file === file)
+                );
+            })
+            .catch(err => alert('Failed to load recitation data: ' + file));
     }
 
     // --- Playback Speed Control ---
@@ -680,6 +707,9 @@
 
     // Initialize on load
     setSpeed(playbackSpeed); // apply saved playback speed
+    document.querySelectorAll('#recitation-selector .seg-option').forEach(btn =>
+        btn.classList.toggle('selected', btn.dataset.file === recitationFile)
+    );
     loadQuranData();
 </script>
 
