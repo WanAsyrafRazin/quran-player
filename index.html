@@ -148,12 +148,17 @@
             min-height: 1.35em;
             direction: rtl;
             text-align: justify;
-            text-align-last: justify;
+            text-align-last: center;
+            line-height: 2.4;
+            white-space: nowrap;
         }
         .mf-line .mf-verse { display: inline; }
+        /* classic measurement layer keeps tight justify + inherited line height */
+        .mf-classic-text .mf-line { line-height: inherit; text-align-last: justify; white-space: normal; }
         /* Classic Dar al-Marefa pages mode: page image + invisible QCF measurement layer */
         .mf-classic {
             position: relative;
+            width: 100%;
             margin: 0 auto;
             background: #fff;
             border-radius: 8px;
@@ -164,6 +169,7 @@
             display: block;
             width: 100%;
             height: 100%;
+            object-fit: contain;
         }
         .mf-classic .mf-classic-text {
             position: absolute;
@@ -201,7 +207,14 @@
         }
         .mf-cover {
             position: absolute;
-            inset: -3px -2px;
+            top: 50%;
+            left: -2px;
+            right: -2px;
+            transform: translateY(-50%);
+            height: 1.3em;
+            max-height: 48px;
+            min-height: 18px;
+            padding: 2px 8px;
             background: linear-gradient(140deg, #2E4A7A, #1B2F52);
             color: #FFFFFF;
             border-radius: 8px;
@@ -209,7 +222,6 @@
             align-items: center;
             justify-content: center;
             font-family: 'Geeza Pro', sans-serif;
-            font-size: .5em;
             font-weight: 700;
             z-index: 3;
             box-shadow: 0 2px 8px rgba(0,0,0,.28);
@@ -218,23 +230,24 @@
         .mf-verse.covered .mf-word { visibility: hidden; }
         .mf-verse.covered .mf-end { visibility: hidden; }
         .mf-surah-header {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            margin: 6px 0 8px;
+            display: block;
+            clear: both;
+            text-align: center;
+            margin: 20px auto;
             padding: 7px 10px;
             background: linear-gradient(180deg, #F3E9D2, #EAD9B4);
             border: 1.5px solid #C9A96A;
             border-radius: 12px;
             direction: rtl;
         }
-        .mf-surah-header .orn { color: #A9803B; font-size: 15px; }
+        .mf-surah-header .orn { color: #A9803B; font-size: 15px; display: inline-block; }
         .mf-surah-header .name {
             font-size: 17px;
             font-weight: 700;
             color: #5C4013;
             font-family: 'Geeza Pro', 'KFGQPC Uthmanic Script HAFS', serif;
+            display: inline-block;
+            padding: 0 8px;
         }
         .mf-bismillah {
             text-align: center;
@@ -736,6 +749,23 @@
             display: flex;
             gap: 10px;
         }
+        .pb-mushaf {
+            flex: 0 0 auto;
+            padding: 13px 12px;
+            border: none;
+            border-radius: 12px;
+            background: #3F5E68;
+            color: #FFFFFF;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            min-width: 46px;
+        }
+        .pb-mushaf:hover { background: #334B54; }
+        .pb-mushaf.active { background: #2B6CB0; }
+        body.dark-mode .pb-mushaf { background: #2A3A44; }
+        body.dark-mode .pb-mushaf.active { background: #2B6CB0; }
         .pb-play {
             flex: 1.5;
             padding: 13px 10px;
@@ -819,7 +849,6 @@
 <div class="player-container">
     <!-- Top Right Theme Toggle -->
     <div class="top-bar">
-        <button class="theme-toggle" onclick="toggleMushaf()" id="mushaf-toggle-btn" aria-label="Toggle Mushaf" title="Mushaf">📖</button>
         <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌙</button>
     </div>
 
@@ -916,7 +945,7 @@
             <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(-1)" aria-label="Previous page">◀</button>
             <div class="mushaf-float-title" id="mushaf-info">Loading…</div>
             <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(1)" aria-label="Next page">▶</button>
-            <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle tajweed colors" title="Toggle tajweed colors">🕌</button>
+            <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle page style" title="Plain text — tap to switch">⬛</button>
             <button class="mushaf-float-close" id="mushaf-close" onclick="toggleMushaf()" aria-label="Close Mushaf">✕</button>
         </div>
         <div class="mushaf-float-body" id="mushaf-page"></div>
@@ -945,6 +974,7 @@
         <div class="pb-row">
             <button id="play-btn" class="pb-play" onclick="togglePlay()">▶ Play</button>
             <button id="stop-btn" class="pb-stop" onclick="stopPlayback()" disabled>⏹ Stop</button>
+            <button id="mushaf-toggle-btn" class="pb-mushaf" onclick="toggleMushaf()" title="Mushaf">📖</button>
         </div>
         <div class="speed-row" id="speed-presets">
             <button class="seg-option" data-speed="0.75" onclick="selectSpeed(this, 0.75)">0.75x</button>
@@ -1215,11 +1245,10 @@
     const MUSHAF_FONT_BASE = 'https://raw.githubusercontent.com/quran/quran.com-images/master/res/fonts/';
     const SURAH_NAMES_AR = {"1":"الفاتحة","2":"البقرة","3":"آل عمران","4":"النساء","5":"المائدة","6":"الأنعام","7":"الأعراف","8":"الأنفال","9":"التوبة","10":"يونس","11":"هود","12":"يوسف","13":"الرعد","14":"ابراهيم","15":"الحجر","16":"النحل","17":"الإسراء","18":"الكهف","19":"مريم","20":"طه","21":"الأنبياء","22":"الحج","23":"المؤمنون","24":"النور","25":"الفرقان","26":"الشعراء","27":"النمل","28":"القصص","29":"العنكبوت","30":"الروم","31":"لقمان","32":"السجدة","33":"الأحزاب","34":"سبإ","35":"فاطر","36":"يس","37":"الصافات","38":"ص","39":"الزمر","40":"غافر","41":"فصلت","42":"الشورى","43":"الزخرف","44":"الدخان","45":"الجاثية","46":"الأحقاف","47":"محمد","48":"الفتح","49":"الحجرات","50":"ق","51":"الذاريات","52":"الطور","53":"النجم","54":"القمر","55":"الرحمن","56":"الواقعة","57":"الحديد","58":"المجادلة","59":"الحشر","60":"الممتحنة","61":"الصف","62":"الجمعة","63":"المنافقون","64":"التغابن","65":"الطلاق","66":"التحريم","67":"الملك","68":"القلم","69":"الحاقة","70":"المعارج","71":"نوح","72":"الجن","73":"المزمل","74":"المدثر","75":"القيامة","76":"الانسان","77":"المرسلات","78":"النبإ","79":"النازعات","80":"عبس","81":"التكوير","82":"الإنفطار","83":"المطففين","84":"الإنشقاق","85":"البروج","86":"الطارق","87":"الأعلى","88":"الغاشية","89":"الفجر","90":"البلد","91":"الشمس","92":"الليل","93":"الضحى","94":"الشرح","95":"التين","96":"العلق","97":"القدر","98":"البينة","99":"الزلزلة","100":"العاديات","101":"القارعة","102":"التكاثر","103":"العصر","104":"الهمزة","105":"الفيل","106":"قريش","107":"الماعون","108":"الكوثر","109":"الكافرون","110":"النصر","111":"المسد","112":"الإخلاص","113":"الفلق","114":"الناس"};
     let mushafPage = 1;
-    let mushafMode = 'plain'; // 'plain' (QCF black text) | 'tajweed' (QCF4 color) | 'classic' (dar al-Marefa pages)
+    let mushafMode = 'plain'; // 'plain' (QCF text) | 'classic' (dar al-Marefa pages)
     try {
         const stored = localStorage.getItem('qp_mushaf_style');
-        if (stored === 'tajweed' || stored === 'classic' || stored === 'plain') mushafMode = stored;
-        else mushafMode = localStorage.getItem('qp_mushaf_tajweed') === '1' ? 'tajweed' : 'plain';
+        mushafMode = stored === 'classic' ? 'classic' : 'plain';
     } catch (e) {}
     const mushafFonts = {};   // page+style -> loaded font family name
     const pageWords = {};     // page -> {lines: {lineNum: [{text,type,surah,ayah}]}}
@@ -1231,26 +1260,12 @@
 
     async function loadMushafFont(page) {
         const pad = String(page).padStart(3, '0');
-        // classic mode uses the plain QCF font as an invisible measurement layer
-        const tajweed = mushafMode === 'tajweed';
-        const name = tajweed ? 'QCF4_' + pad : 'QCF_P' + pad;
-        const key = page + (tajweed ? '_t' : '_p');
+        const name = 'QCF_P' + pad;
+        const key = page + '_p';
         if (mushafFonts[key]) return mushafFonts[key];
         if (document.fonts.check(`16px "${name}"`)) { mushafFonts[key] = name; return name; }
         try {
-            let source;
-            if (tajweed) {
-                // QCF4 tajweed color fonts (COLR) — same positional layout, with tajweed colors
-                const resp = await fetch('https://cdn.jsdelivr.net/gh/alheekmahlib/quran_library@main/assets/fonts/quran_fonts_qfc4/QCF4' + pad + '_COLOR-Regular.ttf.gz');
-                const buf = await resp.arrayBuffer();
-                if (typeof DecompressionStream === 'undefined') throw new Error('gzip unsupported');
-                const ds = new DecompressionStream('gzip');
-                const stream = new Blob([buf]).stream().pipeThrough(ds);
-                source = await new Response(stream).arrayBuffer();
-            } else {
-                source = `url(${MUSHAF_FONT_BASE}${name}.TTF)`;
-            }
-            const f = new FontFace(name, source);
+            const f = new FontFace(name, `url(${MUSHAF_FONT_BASE}${name}.TTF)`);
             await f.load();
             document.fonts.add(f);
             mushafFonts[key] = name;
@@ -1259,15 +1274,6 @@
             mushafFonts[key] = null; // fall back to system Arabic font
             return null;
         }
-    }
-
-    // QCF4 COLR fonts carry theme palettes: 0 = light, 1 = dark. Pick per current theme.
-    function applyMushafPalette(fontName) {
-        if (!fontName || mushafMode !== 'tajweed') return;
-        const dark = document.body.classList.contains('dark-mode');
-        let el = document.getElementById('mf-palette-style');
-        if (!el) { el = document.createElement('style'); el.id = 'mf-palette-style'; document.head.appendChild(el); }
-        el.textContent = `@font-palette-values --MF { font-family: '${fontName}'; base-palette: ${dark ? 1 : 0}; }`;
     }
 
     // Detect the text grid of a page image (canvas row-darkness analysis).
@@ -1442,7 +1448,6 @@
 
         const fs = mushafFontSize();
         const fontFamily = fontName ? `'${fontName}'` : null;
-        applyMushafPalette(fontName);
 
         // Build the full 15-line page: line 1..15, with surah header + bismillah
         // slots where the API's word line numbers have gaps (surah starts).
@@ -1493,22 +1498,21 @@
         if (mushafPage !== p || !document.getElementById('mushaf-panel').classList.contains('visible')) return;
         const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
 
-        // Scale image to fit the panel width (maintain aspect)
+        // Panel width (used for the fallback's pixel scale; the coords path is % based)
         const panel = document.getElementById('mushaf-panel');
         const maxW = Math.min((panel ? panel.getBoundingClientRect().width : 460) - 24, iw);
         const scale = maxW / iw;
-        const dispW = Math.round(iw * scale);
-        const dispH = Math.round(ih * scale);
 
         const coords = await getPageCoords(p);
         let coversHtml = '', textLayer = '';
         if (coords && coords.w === iw && coords.h === ih) {
-            // EXACT path: precomputed per-ayah coordinates (image px) → absolute covers.
-            // No grid detection, no measurement layer — covers land exactly on the page.
+            // EXACT path: precomputed per-ayah coordinates → percentage-positioned
+            // covers. Percentages keep the overlay locked to the image at ANY size
+            // (viewport resize / rotation), matching the fixed aspect-ratio parent.
             for (const vkey of Object.keys(coords.verses)) {
                 for (const [x, y, w, h] of coords.verses[vkey]) {
                     coversHtml += `<span class="mf-verse" data-vkey="${vkey}" onclick="toggleVerseCloze(this)"
-                        style="position:absolute;left:${(x * scale).toFixed(1)}px;top:${(y * scale).toFixed(1)}px;width:${(w * scale).toFixed(1)}px;height:${(h * scale).toFixed(1)}px;">
+                        style="position:absolute;left:${(x / iw * 100).toFixed(3)}%;top:${(y / ih * 100).toFixed(3)}%;width:${(w / iw * 100).toFixed(3)}%;height:${(h / ih * 100).toFixed(3)}%;">
                         <span class="mf-cover">${toArabicDigits(vkey.split(':')[1])}</span></span>`;
                 }
             }
@@ -1581,7 +1585,7 @@
         }
 
         pageEl.innerHTML = `
-            <div class="mf-classic" style="width:${dispW}px;height:${dispH}px;" onclick="classicTap(event)">
+            <div class="mf-classic" style="aspect-ratio:${iw}/${ih};" onclick="classicTap(event)">
                 <img class="mf-classic-img" src="${MUSHAF_PAGE_IMG}${p}.jpg" alt="Page ${p}">
                 ${textLayer}${coversHtml}
             </div>`;
@@ -1603,6 +1607,18 @@
         if (best) toggleVerseCloze(best);
     }
 
+    // Viewport resize (e.g. rotation): the %-based coords covers scale with the
+    // container automatically; re-render so the pixel-based fallback layer and
+    // the panel sizing stay aligned too.
+    let mushafResizeT = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(mushafResizeT);
+        mushafResizeT = setTimeout(() => {
+            const panel = document.getElementById('mushaf-panel');
+            if (panel && panel.classList.contains('visible')) showMushafPage(mushafPage);
+        }, 250);
+    });
+
     function lastSurahOfSlot(slots, ln, lineNums) {
         // surah of the nearest word line at/after this slot (header sits before its surah's words)
         for (let i = ln; i <= 15; i++) {
@@ -1615,8 +1631,7 @@
     }
 
     function mushafLineHtml(words, fs, fontFamily, isClassic) {
-        const pal = (!isClassic && mushafMode === 'tajweed') ? 'font-palette:--MF;' : '';
-        let lineHtml = `<div class="mf-line" style="font-size:${fs}px;${fontFamily ? `font-family:${fontFamily};` : ''}${pal}">`;
+        let lineHtml = `<div class="mf-line" style="font-size:${fs}px;${fontFamily ? `font-family:${fontFamily};` : ''}">`;
         let curVerse = null;
         let frag = '';
         const flush = () => {
@@ -1679,13 +1694,13 @@
     }
 
     function toggleMushafStyle() {
-        // cycle: plain → tajweed → classic → plain
-        mushafMode = mushafMode === 'plain' ? 'tajweed' : mushafMode === 'tajweed' ? 'classic' : 'plain';
+        // cycle: plain ↔ classic (tajweed removed)
+        mushafMode = mushafMode === 'classic' ? 'plain' : 'classic';
         try { localStorage.setItem('qp_mushaf_style', mushafMode); } catch (e) {}
         const btn = document.getElementById('mushaf-style-btn');
         if (btn) {
-            btn.textContent = mushafMode === 'tajweed' ? '🕌' : mushafMode === 'classic' ? '🖼' : '⬛';
-            btn.title = mushafMode === 'tajweed' ? 'Tajweed colors — tap to switch' : mushafMode === 'classic' ? 'Classic pages — tap to switch' : 'Plain text — tap to switch';
+            btn.textContent = mushafMode === 'classic' ? '🖼' : '⬛';
+            btn.title = mushafMode === 'classic' ? 'Classic pages — tap to switch' : 'Plain text — tap to switch';
         }
         showMushafPage(mushafPage);
     }
@@ -1704,11 +1719,11 @@
 
     // Floating window: draggable via its header
     (function initMushafUI() {
-        // restore style button state
+        // restore style button state (tajweed removed → plain/classic only)
         const styleBtn = document.getElementById('mushaf-style-btn');
         if (styleBtn) {
-            styleBtn.textContent = mushafMode === 'tajweed' ? '🕌' : mushafMode === 'classic' ? '🖼' : '⬛';
-            styleBtn.title = mushafMode === 'tajweed' ? 'Tajweed colors — tap to switch' : mushafMode === 'classic' ? 'Classic pages — tap to switch' : 'Plain text — tap to switch';
+            styleBtn.textContent = mushafMode === 'classic' ? '🖼' : '⬛';
+            styleBtn.title = mushafMode === 'classic' ? 'Classic pages — tap to switch' : 'Plain text — tap to switch';
         }
     })();
 

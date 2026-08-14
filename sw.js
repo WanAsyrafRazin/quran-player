@@ -3,7 +3,9 @@
 // because service-worker caches are wiped on every app update. Audio requests
 // pass straight through to the network — the page serves blob: URLs from
 // IndexedDB when files are saved, so this never blocks offline playback.
-const CACHE = 'quran-player-v18';
+const CACHE = 'quran-player-v19';
+// All per-ayah page coordinates are precached so classic-mode cloze works offline.
+const COORDS = Array.from({ length: 604 }, (_, i) => './page-coords/' + (i + 1) + '.json');
 const SHELL = [
   './',
   './index.html',
@@ -19,7 +21,7 @@ const AUDIO_RE = /mirrors\.quranicaudio\.com|server12\.mp3quran\.net|download\.q
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE)
-      .then((c) => c.addAll(SHELL))
+      .then((c) => c.addAll(SHELL.concat(COORDS)))
       .then(() => self.skipWaiting())
   );
 });
