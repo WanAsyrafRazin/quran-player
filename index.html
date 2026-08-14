@@ -1314,20 +1314,15 @@
     }
 
     async function loadMushafFont(page) {
-        const pad = String(page).padStart(3, '0');
-        const name = 'QCF_P' + pad;
-        const key = page + '_p';
-        if (mushafFonts[key]) return mushafFonts[key];
-        try {
-            const f = new FontFace(name, `url(${MUSHAF_FONT_BASE}${name}.TTF)`);
-            await f.load();
-            document.fonts.add(f);
-            mushafFonts[key] = name;
-            return name;
-        } catch (e) {
-            mushafFonts[key] = null; // fall back to system Arabic font
-            return null;
-        }
+        // NOTE (v24): the QCF_P{NNN}.TTF files in the quran.com-images repo are
+        // STUB fonts — every Arabic glyph is a hollow rectangle (verified at the
+        // binary level: 8 points, 0 off-curve, identical coords for all letters).
+        // Loading them renders tofu boxes. The real quran.com font is
+        // UthmanicHafs1Ver18.woff2 on their CDN, but its metrics differ from the
+        // QCF page fonts the layout was tuned for. The system Arabic fallback
+        // renders beautifully (the user-approved look) and the fit-to-width loop
+        // in showMushafPage keeps lines from clipping. So: always use fallback.
+        return null;
     }
 
     // Detect the text grid of a page image (canvas row-darkness analysis).
