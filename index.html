@@ -194,6 +194,8 @@
             border-radius: 8px;
             overflow: hidden;
             line-height: 0;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
         .mf-classic img.mf-classic-img {
             display: block;
@@ -224,6 +226,8 @@
             display: inline;
             cursor: pointer;
             border-radius: 6px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
         .mf-verse:hover { background: rgba(19,50,112,.06); }
         .mf-word { display: inline-block; white-space: pre; }
@@ -334,15 +338,52 @@
             border-radius: 8px;
             background: #FFFFFF;
             color: #1A1A1A;
-            font-size: 14px;
+            font-size: 16px; /* >=16px prevents iOS auto-zoom on focus */
             font-weight: 700;
             text-align: center;
+            touch-action: manipulation;
         }
+        .mushaf-go {
+            border: none;
+            background: #2B6CB0;
+            color: #FFFFFF;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        .mushaf-go:hover { background: #245A96; }
+        .mushaf-go:active { transform: scale(0.96); }
+        body.dark-mode .mushaf-go { background: #2B6CB0; }
         .mushaf-page-input:focus { outline: 2px solid #2B6CB0; border-color: #2B6CB0; }
         .mushaf-reset.toggle-on { background: #2F6B4F; }
         .mushaf-reset.toggle-on:hover { background: #27593F; }
         body.dark-mode .mushaf-pagelabel { color: #A0AEC0; }
         body.dark-mode .mushaf-page-input { background: #2A3A44; color: #EDF2F7; border-color: #4A5568; }
+        /* classic page: overlay page number at bottom center of the image */
+        .mf-classic-pagenum {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            font-family: 'Geeza Pro', 'KFGQPC Uthmanic Script HAFS', serif;
+            font-size: 14px;
+            font-weight: 700;
+            color: #A9803B;
+            background: rgba(243, 233, 210, 0.92);
+            border: 1px solid #C9A96A;
+            border-radius: 8px;
+            padding: 1px 10px;
+            pointer-events: none;
+        }
+        body.dark-mode .mf-classic-pagenum {
+            color: #D9B877;
+            background: rgba(26, 35, 46, 0.85);
+            border-color: #4A5568;
+        }
         .mushaf-hint {
             font-size: 12px;
             color: #8E919D;
@@ -1024,6 +1065,7 @@
         <div class="mushaf-float-controls">
             <label class="mushaf-pagelabel" title="Go to page">📄
                 <input type="number" id="mushaf-page-input" class="mushaf-page-input" min="1" max="604" inputmode="numeric" aria-label="Page number">
+                <button type="button" class="mushaf-go" id="mushaf-go-btn">Go</button>
             </label>
             <button class="mushaf-reset" id="mushaf-toggle-all" onclick="mushafToggleAll()">👁 Reveal all</button>
             <span class="mushaf-hint">👆 Tap a verse to cover / reveal</span>
@@ -1737,6 +1779,7 @@
             <div class="mf-classic" style="aspect-ratio:${iw}/${ih};width:${maxW}px;" onclick="classicTap(event)">
                 <img class="mf-classic-img" src="${MUSHAF_PAGE_IMG}${p}.jpg" alt="Page ${p}">
                 ${textLayer}${coversHtml}
+                <span class="mf-classic-pagenum">${toArabicDigits(p)}</span>
             </div>`;
         updateToggleAllBtn();
     }
@@ -1925,13 +1968,19 @@
             styleBtn.textContent = mushafMode === 'classic' ? '🖼' : '⬛';
             styleBtn.title = mushafMode === 'classic' ? 'Classic pages — tap to switch' : 'Plain text — tap to switch';
         }
-        // page-number input: Enter jumps to the page
+        // page-number input: Enter/Go/change all jump to the page
         const pin = document.getElementById('mushaf-page-input');
         if (pin) {
+            const go = () => mushafGoToPage();
             pin.addEventListener('keydown', e => {
-                if (e.key === 'Enter') { e.preventDefault(); mushafGoToPage(); }
+                if (e.key === 'Enter') { e.preventDefault(); go(); }
             });
+            // mobile numeric keyboards often don't send Enter; the change
+            // event fires when the field loses focus with a new value
+            pin.addEventListener('change', go);
             pin.addEventListener('blur', () => { if (pin.value === '') pin.value = mushafPage; });
+            const goBtn = document.getElementById('mushaf-go-btn');
+            if (goBtn) goBtn.addEventListener('click', go);
         }
     })();
 
