@@ -142,11 +142,25 @@ def main():
     keys = list(old_verses.keys())
     nk = len(keys)
 
+    # Note on continuation detection: surah_structure.json maps each verse to
+    # ONE page (its start page), so it cannot tell whether a verse spans two
+    # pages — the previous structure-based check always returned False.
+    # The emblem count itself is the signal: a page whose last verse truly
+    # continues has only nk-1 emblems (the last verse's emblem is on the next
+    # page). But a MISSING faint emblem (below threshold) also yields nk-1.
+    # So prefer nk whenever ANY threshold reaches it (missing-emblem case is
+    # far more common than a false positive completing the count); only use
+    # nk-1 when no threshold finds all nk emblems (true continuation).
+
     def detect_all(thr):
         dets = []
         for name, t in tmpls.items():
             for (x, y, w, h, sc) in nms(detect_emblem_matches(gray, t, thr=thr)):
                 dets.append({'type': name, 'x': x, 'y': y, 'w': w, 'h': h, 'score': sc})
+        # Size filter: real emblems are ~42-55 x 57-79 px at native res.
+        # Tiny fragments (21x29) and oversized ornament matches (75x108+)
+        # are false positives that corrupt the count.
+        dets = [d for d in dets if 28 <= d['w'] <= 70 and 38 <= d['h'] <= 95]
         dets.sort(key=lambda d: -d['score'])
         merged = []
         for d in dets:
@@ -157,8 +171,12 @@ def main():
         return merged
 
     # Path A: reading-order ladder — i-th emblem (reading order) ends the
-    # i-th verse. Perfect when some threshold gives an exact count match.
+    # i-th verse. Scan ALL thresholds; prefer the first that yields EXACTLY
+    # nk (every verse ends on this page). A nk-1 result is ambiguous (true
+    # continuation OR a faint missed emblem), so it is kept only as a
+    # fallback if no threshold ever reaches nk.
     ladder = None
+    ladder_alt = None  # best nk-1 candidate (true continuation fallback)
     for thr in (0.6, 0.55, 0.5, 0.45):
         merged = detect_all(thr)
         merged.sort(key=lambda d: (d['y'] + d['h'] / 2, d['x']))
@@ -175,9 +193,13 @@ def main():
         for b in sorted(banded, key=lambda b: b['cy']):
             b['items'].sort(key=lambda d: -d['x'])
             ordered.extend(b['items'])
-        if len(ordered) in (nk, nk - 1):
+        if len(ordered) == nk and ladder is None:
             ladder = ordered
-            break
+            break  # exact count found at the highest threshold — done
+        if len(ordered) == nk - 1 and ladder_alt is None:
+            ladder_alt = ordered
+    if ladder is None:
+        ladder = ladder_alt
 
     # Path B: score-ordered positional assignment — for pages where no
     # threshold gives an exact count (missing interior emblems / false
