@@ -18,7 +18,7 @@
             background-color: #F6F7FA;
             color: #1A1A1A;
             margin: 0;
-            padding: 20px 20px 110px 20px;
+            padding: 20px 20px 340px 20px;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -469,30 +469,50 @@
         body.dark-mode .jump-suggest .js-item.hl { background: #2D3748; }
         body.dark-mode .jump-suggest .js-item .js-sub { color: #718096; }
 
-        /* Bottom Transport Bar */
+        /* Floating Player Bar (now playing + transport + speed — always visible) */
         .bottom-bar {
             position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            display: flex;
-            justify-content: center;
-            padding: 10px 16px calc(10px + env(safe-area-inset-bottom)) 16px;
-            background: rgba(246, 247, 250, 0.95);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-top: 1px solid #EAECEF;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(calc(100% - 20px), 400px);
+            background: rgba(246, 247, 250, 0.96);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid #EAECEF;
+            border-radius: 20px;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+            padding: 12px 14px calc(12px + env(safe-area-inset-bottom)) 14px;
             z-index: 100;
         }
         .bottom-bar-inner {
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            gap: 8px;
             width: 100%;
-            max-width: 400px;
+        }
+        .np-bar {
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: #2D3748;
+            min-height: 18px;
+            line-height: 1.4;
+            transition: color 0.3s ease;
+        }
+        .np-bar .np-sub {
+            display: block;
+            font-size: 11.5px;
+            font-weight: 500;
+            color: #8E919D;
+        }
+        .pb-row {
+            display: flex;
+            gap: 10px;
         }
         .pb-play {
             flex: 1.5;
-            padding: 14px 10px;
+            padding: 13px 10px;
             border: none;
             border-radius: 12px;
             background: #3F5E68;
@@ -507,7 +527,7 @@
         .pb-play.playing:hover { background: #2C5282; }
         .pb-stop {
             flex: 1;
-            padding: 14px 10px;
+            padding: 13px 10px;
             border: none;
             border-radius: 12px;
             background: #E53E3E;
@@ -523,16 +543,49 @@
             color: #A0AEC0;
             cursor: not-allowed;
         }
-        body.dark-mode .bottom-bar {
-            background: rgba(17, 23, 32, 0.95);
-            border-top-color: #2D3748;
+        .speed-row {
+            display: flex;
+            background: #F0F2F5;
+            padding: 3px;
+            border-radius: 10px;
+            gap: 2px;
         }
+        .speed-row .seg-option {
+            flex: 1;
+            padding: 8px 0;
+            font-size: 13px;
+            border-radius: 8px;
+        }
+        #speed-slider {
+            width: 100%;
+            margin: 2px 0 0 0;
+            accent-color: #3F5E68;
+            cursor: pointer;
+        }
+        .speed-labels {
+            display: flex;
+            justify-content: space-between;
+            color: #8E919D;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 0 2px;
+            transition: color 0.3s ease;
+        }
+        body.dark-mode .bottom-bar {
+            background: rgba(17, 23, 32, 0.96);
+            border-color: #2D3748;
+        }
+        body.dark-mode .np-bar { color: #E2E8F0; }
+        body.dark-mode .np-bar .np-sub { color: #718096; }
         body.dark-mode .pb-play { background: #2D3748; }
         body.dark-mode .pb-play:hover { background: #3A4A5C; }
         body.dark-mode .pb-play.playing { background: #2B6CB0; }
         body.dark-mode .pb-stop { background: #C53030; }
         body.dark-mode .pb-stop:hover { background: #9B2C2C; }
         body.dark-mode .pb-stop:disabled { background: #2D3748; color: #4A5568; }
+        body.dark-mode .speed-row { background: #111720; }
+        body.dark-mode #speed-slider { accent-color: #7FB3C9; }
+        body.dark-mode .speed-labels { color: #718096; }
     </style>
 </head>
 <body>
@@ -599,12 +652,6 @@
         <div style="height: 4px;"></div>
     </div>
 
-    <div class="section-header">NOW PLAYING</div>
-    <div class="section-panel">
-        <div id="now-playing" class="now-playing">Not playing</div>
-        <div style="height: 4px;"></div>
-    </div>
-
     <div class="section-header">PLAY EACH VERSE</div>
     <div class="section-panel">
         <div class="segmented-control" id="each-verse-repeat">
@@ -646,10 +693,17 @@
         <div id="dl-progress" class="dl-progress" style="display:none;"></div>
         <div class="offline-hint">💡 <b>Install:</b> iPhone/iPad Safari → Share → <b>Add to Home Screen</b>. Then open the app icon (full-screen, like a native app). Audio is cached automatically whenever you play a surah — or grab everything with the buttons above. Keep the app open while downloading. Works in airplane mode once cached.</div>
     </div>
+</div>
 
-    <div class="section-header">PLAYBACK SPEED</div>
-    <div class="section-panel">
-        <div class="segmented-control" id="speed-presets">
+<!-- Floating player bar (always visible): now playing + transport + speed -->
+<div class="bottom-bar">
+    <div class="bottom-bar-inner">
+        <div id="now-playing" class="np-bar">Not playing</div>
+        <div class="pb-row">
+            <button id="play-btn" class="pb-play" onclick="togglePlay()">▶ Play</button>
+            <button id="stop-btn" class="pb-stop" onclick="stopPlayback()" disabled>⏹ Stop</button>
+        </div>
+        <div class="speed-row" id="speed-presets">
             <button class="seg-option" data-speed="0.75" onclick="selectSpeed(this, 0.75)">0.75x</button>
             <button class="seg-option selected" data-speed="1" onclick="selectSpeed(this, 1)">1x</button>
             <button class="seg-option" data-speed="1.1" onclick="selectSpeed(this, 1.1)">1.1x</button>
@@ -662,14 +716,6 @@
             <span id="speed-value">1.0x</span>
             <span>1.5x</span>
         </div>
-    </div>
-</div>
-
-<!-- Bottom transport bar (always visible) -->
-<div class="bottom-bar">
-    <div class="bottom-bar-inner">
-        <button id="play-btn" class="pb-play" onclick="togglePlay()">▶ Play</button>
-        <button id="stop-btn" class="pb-stop" onclick="stopPlayback()" disabled>⏹ Stop</button>
     </div>
 </div>
 
@@ -1151,6 +1197,7 @@
             audioPlayer.ontimeupdate = null;
             playBtn.innerHTML = '▶ Play';
             playBtn.classList.remove('playing');
+            setMediaState('paused');
             return;
         }
 
@@ -1162,6 +1209,7 @@
             audioPlayer.ontimeupdate = handleTimeUpdate;
             playBtn.innerHTML = '⏸ Pause';
             playBtn.classList.add('playing');
+            setMediaState('playing');
             return;
         }
 
@@ -1225,6 +1273,7 @@
         document.getElementById('play-btn').classList.remove('playing');
         document.getElementById('stop-btn').disabled = true;
         document.getElementById('now-playing').innerHTML = 'Not playing';
+        setMediaState('none');
     }
 
     // Reads from local data instead of fetching APIs
@@ -1258,6 +1307,71 @@
         if (!v) return;
         document.getElementById('now-playing').innerHTML =
             `<b>${v.surahName}</b> — Ayah ${v.ayahNum}<span class="np-sub">Juz ${v.juz} · Page ${v.page}</span>`;
+        syncMediaSession(v);
+    }
+
+    // --- Media Session (system notification / lock screen / control center) ---
+    function setMediaState(state) {
+        if ('mediaSession' in navigator) {
+            try { navigator.mediaSession.playbackState = state; } catch (e) {}
+        }
+    }
+
+    // Keep the OS notification in sync with the current verse
+    function syncMediaSession(v) {
+        if (!('mediaSession' in navigator)) return;
+        try {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: `${v.surahNum}. ${v.surahName} — Ayah ${v.ayahNum}`,
+                artist: `Maher al Muaiqly · ${playbackSpeed.toFixed(2).replace(/0$/, '')}x · Juz ${v.juz} · Page ${v.page}`,
+                album: 'Quran Player',
+                artwork: [
+                    { src: 'icon-192-v2.png', sizes: '192x192', type: 'image/png' },
+                    { src: 'icon-512-v2.png', sizes: '512x512', type: 'image/png' }
+                ]
+            });
+            navigator.mediaSession.playbackState = 'playing';
+        } catch (e) {}
+    }
+
+    function setupMediaSession() {
+        if (!('mediaSession' in navigator)) return;
+        try {
+            const ms = navigator.mediaSession;
+            ms.setActionHandler('play', () => { if (!isPlaying) togglePlay(); });
+            ms.setActionHandler('pause', () => { if (isPlaying) togglePlay(); });
+            ms.setActionHandler('stop', () => stopPlayback());
+            ms.setActionHandler('seekbackward', (d) => seekBy(-(d && d.seekOffset ? d.seekOffset : 10)));
+            ms.setActionHandler('seekforward', (d) => seekBy(d && d.seekOffset ? d.seekOffset : 10));
+            ms.setActionHandler('seekto', (d) => { if (d && d.seekTime != null) seekTo(d.seekTime); });
+            ms.setActionHandler('previoustrack', () => skipVerse(-1));
+            ms.setActionHandler('nexttrack', () => skipVerse(1));
+        } catch (e) {}
+    }
+
+    // Seek within the current verse only (keeps the gapless engine in sync)
+    function seekBy(delta) {
+        const v = playlist[currentAyahIndex];
+        if (!v) return;
+        const t = Math.min(v.end_time - 0.05, Math.max(v.start_time, audioPlayer.currentTime + delta));
+        audioPlayer.currentTime = t;
+    }
+
+    function seekTo(t) {
+        const v = playlist[currentAyahIndex];
+        if (!v) return;
+        audioPlayer.currentTime = Math.min(v.end_time - 0.05, Math.max(v.start_time, t));
+    }
+
+    // Skip to the previous/next verse in the current playlist
+    function skipVerse(dir) {
+        if (playlist.length === 0) return;
+        const n = currentAyahIndex + dir;
+        if (n < 0 || n >= playlist.length) return;
+        currentAyahIndex = n;
+        currentAyahRepeatCount = 1;
+        if (isPlaying || isPaused) playCurrentVerse();
+        else updateNowPlaying();
     }
 
     function playCurrentVerse() {
@@ -1290,6 +1404,15 @@
         if (audioPlayer.currentTime >= currentVerse.end_time - 0.05) {
             audioPlayer.ontimeupdate = null; 
             handleVerseEnd();
+        } else if ('mediaSession' in navigator) {
+            // keep the notification progress bar showing the current verse
+            try {
+                navigator.mediaSession.setPositionState({
+                    duration: currentVerse.end_time - currentVerse.start_time,
+                    playbackRate: playbackSpeed,
+                    position: Math.max(0, audioPlayer.currentTime - currentVerse.start_time)
+                });
+            } catch (e) {}
         }
     }
 
@@ -1414,6 +1537,7 @@
     }
 
     // Initialize on load
+    setupMediaSession();
     setSpeed(playbackSpeed); // apply saved playback speed
     document.querySelectorAll('#recitation-selector .seg-option').forEach(btn =>
         btn.classList.toggle('selected', btn.dataset.file === recitationFile)
