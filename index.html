@@ -150,6 +150,39 @@
             text-align-last: center;
         }
         .mf-line .mf-verse { display: inline; }
+        /* Plain-text page frame: printed-mushaf corners — juz top-left,
+           surah name top-right, page number bottom-center. */
+        .mf-frame { display: flex; flex-direction: column; height: 100%; }
+        .mf-frame-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            direction: rtl;
+            padding: 0 2px 6px;
+            flex-shrink: 0;
+        }
+        .mf-corner-box {
+            font-family: 'Geeza Pro', 'KFGQPC Uthmanic Script HAFS', serif;
+            font-size: 0.68em;
+            font-weight: 600;
+            color: #A9803B;
+            background: linear-gradient(180deg, #F3E9D2, #EAD9B4);
+            border: 1px solid #C9A96A;
+            border-radius: 10px;
+            padding: 3px 12px;
+            white-space: nowrap;
+        }
+        .mf-frame-mid { flex: 1; }
+        .mf-frame-bottom {
+            text-align: center;
+            padding-top: 6px;
+            flex-shrink: 0;
+        }
+        .mf-pagenum {
+            display: inline-block;
+            min-width: 2.2em;
+            text-align: center;
+        }
         /* classic measurement layer keeps tight justify + inherited line height */
         .mf-classic-text .mf-line { line-height: inherit; text-align-last: justify; white-space: normal; }
         /* Classic Dar al-Marefa pages mode: page image + invisible QCF measurement layer */
@@ -306,6 +339,11 @@
         body.dark-mode .mf-surah-header { background: linear-gradient(180deg, #2A3450, #1F2940); border-color: #4A5568; }
         body.dark-mode .mf-surah-header .name { color: #E8D5A0; }
         body.dark-mode .mf-bismillah { color: #E2E8F0; }
+        body.dark-mode .mf-corner-box {
+            color: #E8D5A0;
+            background: linear-gradient(180deg, #2A3450, #1F2940);
+            border-color: #4A5568;
+        }
         body.dark-mode .mushaf-caption { color: #7FB3A8; }
         body.dark-mode .theme-toggle.active { background: #2D3748; border-color: #2D3748; }
 
@@ -955,6 +993,7 @@
             <div class="mushaf-float-title" id="mushaf-info">Loading…</div>
             <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(1)" aria-label="Next page">▶</button>
             <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle page style" title="Plain text — tap to switch">⬛</button>
+            <button class="mushaf-nav" id="mushaf-theme-btn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Night mode">🌙</button>
             <button class="mushaf-float-close" id="mushaf-close" onclick="toggleMushaf()" aria-label="Close Mushaf">✕</button>
         </div>
         <div class="mushaf-float-body" id="mushaf-page"></div>
@@ -1003,16 +1042,23 @@
 
 <script>
     // --- Dark Mode Logic ---
+    function setThemeButtons(isDark) {
+        const icon = isDark ? '☀️' : '🌙';
+        ['theme-toggle-btn', 'mushaf-theme-btn'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = icon;
+        });
+    }
     function toggleTheme() {
         document.body.classList.toggle('dark-mode');
         const isDark = document.body.classList.contains('dark-mode');
-        document.getElementById('theme-toggle-btn').innerText = isDark ? '☀️' : '🌙';
+        setThemeButtons(isDark);
         localStorage.setItem('quran_player_theme', isDark ? 'dark' : 'light');
     }
 
     if (localStorage.getItem('quran_player_theme') === 'dark') {
         document.body.classList.add('dark-mode');
-        document.getElementById('theme-toggle-btn').innerText = '☀️';
+        setThemeButtons(true);
     }
 
     // --- 1. Database & App State ---
@@ -1423,7 +1469,8 @@
         const body = document.getElementById('mushaf-page');
         const h = body ? body.clientHeight : 700;
         const byWidth = Math.max(20, Math.round(w / 21));
-        const byHeight = Math.max(14, Math.floor(h / 36)); // ~2.5em header + 2em bismillah + 30em lines + margins
+        // frame (top corners + bottom page num ~3em) + header ~2.5em + bismillah ~2em + 15 lines (30em)
+        const byHeight = Math.max(14, Math.floor(h / 38));
         return Math.min(byWidth, byHeight);
     }
 
@@ -1503,7 +1550,15 @@
             }
         }
 
-        pageEl.innerHTML = html;
+        pageEl.innerHTML = `
+            <div class="mf-frame" style="font-size:${fs}px">
+                <div class="mf-frame-top">
+                    <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
+                    <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
+                </div>
+                <div class="mf-frame-mid">${html}</div>
+                <div class="mf-frame-bottom"><span class="mf-corner-box mf-pagenum">${toArabicDigits(p)}</span></div>
+            </div>`;
     }
 
     // Classic mode: show the actual Dar al-Marefa tajweed page image, with an
