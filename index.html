@@ -318,6 +318,31 @@
             cursor: pointer;
         }
         .mushaf-reset:hover { background: #C53030; }
+        .mushaf-pagelabel {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
+            color: #4A5568;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .mushaf-page-input {
+            width: 56px;
+            padding: 5px 8px;
+            border: 1px solid #CBBFA0;
+            border-radius: 8px;
+            background: #FFFFFF;
+            color: #1A1A1A;
+            font-size: 14px;
+            font-weight: 700;
+            text-align: center;
+        }
+        .mushaf-page-input:focus { outline: 2px solid #2B6CB0; border-color: #2B6CB0; }
+        .mushaf-reset.toggle-on { background: #2F6B4F; }
+        .mushaf-reset.toggle-on:hover { background: #27593F; }
+        body.dark-mode .mushaf-pagelabel { color: #A0AEC0; }
+        body.dark-mode .mushaf-page-input { background: #2A3A44; color: #EDF2F7; border-color: #4A5568; }
         .mushaf-hint {
             font-size: 12px;
             color: #8E919D;
@@ -998,7 +1023,10 @@
         </div>
         <div class="mushaf-float-body" id="mushaf-page"></div>
         <div class="mushaf-float-controls">
-            <button class="mushaf-reset" onclick="mushafRevealAll()">👁 Reveal all</button>
+            <label class="mushaf-pagelabel" title="Go to page">📄
+                <input type="number" id="mushaf-page-input" class="mushaf-page-input" min="1" max="604" inputmode="numeric" aria-label="Page number">
+            </label>
+            <button class="mushaf-reset" id="mushaf-toggle-all" onclick="mushafToggleAll()">👁 Reveal all</button>
             <span class="mushaf-hint">👆 Tap a verse to cover / reveal</span>
         </div>
     </div>
@@ -1481,6 +1509,8 @@
     async function showMushafPage(p) {
         p = Math.min(604, Math.max(1, p));
         mushafPage = p;
+        const pin = document.getElementById('mushaf-page-input');
+        if (pin) pin.value = p;
         const info = document.getElementById('mushaf-info');
         const { first, last } = pageInfo(p);
         info.textContent = first && last
@@ -1558,6 +1588,7 @@
             html = buildPlainHtml(slots, lineNums, fs, fontFamily);
             pageEl.innerHTML = frameHtml(fs);
         }
+        updateToggleAllBtn();
     }
 
     // Build the 15-line plain page HTML (slots → header / bismillah / words).
@@ -1690,6 +1721,7 @@
                 <img class="mf-classic-img" src="${MUSHAF_PAGE_IMG}${p}.jpg" alt="Page ${p}">
                 ${textLayer}${coversHtml}
             </div>`;
+        updateToggleAllBtn();
     }
 
     // Tap anywhere on a classic page → toggle the cloze cover of the nearest verse
@@ -1791,10 +1823,45 @@
         document.querySelectorAll(`#mushaf-page .mf-verse[data-vkey="${vkey}"]`).forEach(v => {
             v.classList.toggle('covered', !nowCovered);
         });
+        updateToggleAllBtn();
     }
 
     function mushafRevealAll() {
         document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.remove('covered'));
+        updateToggleAllBtn();
+    }
+
+    // Toggle: if anything is still covered → reveal all; if everything is
+    // revealed → cover (cloze) all. The button label mirrors the action it
+    // would perform (mushaf-hint style), plus a green state while "Cloze all".
+    function mushafToggleAll() {
+        const anyCovered = [...document.querySelectorAll('#mushaf-page .mf-verse')]
+            .some(el => el.classList.contains('covered'));
+        if (anyCovered) mushafRevealAll();
+        else document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
+        updateToggleAllBtn();
+    }
+
+    function updateToggleAllBtn() {
+        const btn = document.getElementById('mushaf-toggle-all');
+        if (!btn) return;
+        const anyCovered = [...document.querySelectorAll('#mushaf-page .mf-verse')]
+            .some(el => el.classList.contains('covered'));
+        if (anyCovered) {
+            btn.textContent = '👁 Reveal all';
+            btn.classList.remove('toggle-on');
+        } else {
+            btn.textContent = '🔒 Cloze all';
+            btn.classList.add('toggle-on');
+        }
+    }
+
+    function mushafGoToPage() {
+        const inp = document.getElementById('mushaf-page-input');
+        if (!inp) return;
+        const v = parseInt(inp.value, 10);
+        if (!isNaN(v) && v >= 1 && v <= 604) showMushafPage(v);
+        else { inp.value = mushafPage; }
     }
 
     function toggleMushaf() {
@@ -1840,6 +1907,14 @@
         if (styleBtn) {
             styleBtn.textContent = mushafMode === 'classic' ? '🖼' : '⬛';
             styleBtn.title = mushafMode === 'classic' ? 'Classic pages — tap to switch' : 'Plain text — tap to switch';
+        }
+        // page-number input: Enter jumps to the page
+        const pin = document.getElementById('mushaf-page-input');
+        if (pin) {
+            pin.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); mushafGoToPage(); }
+            });
+            pin.addEventListener('blur', () => { if (pin.value === '') pin.value = mushafPage; });
         }
     })();
 
