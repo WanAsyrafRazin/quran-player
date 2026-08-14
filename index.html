@@ -302,9 +302,9 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 10px 12px;
+            padding: 8px 12px;
             background: #F4EFE2;
-            border-top: 1px solid #E8E0CC;
+            border-bottom: 1px solid #E8E0CC;
             flex-shrink: 0;
         }
         .mushaf-reset {
@@ -1021,7 +1021,6 @@
             <button class="mushaf-nav" id="mushaf-theme-btn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Night mode">🌙</button>
             <button class="mushaf-float-close" id="mushaf-close" onclick="toggleMushaf()" aria-label="Close Mushaf">✕</button>
         </div>
-        <div class="mushaf-float-body" id="mushaf-page"></div>
         <div class="mushaf-float-controls">
             <label class="mushaf-pagelabel" title="Go to page">📄
                 <input type="number" id="mushaf-page-input" class="mushaf-page-input" min="1" max="604" inputmode="numeric" aria-label="Page number">
@@ -1029,6 +1028,7 @@
             <button class="mushaf-reset" id="mushaf-toggle-all" onclick="mushafToggleAll()">👁 Reveal all</button>
             <span class="mushaf-hint">👆 Tap a verse to cover / reveal</span>
         </div>
+        <div class="mushaf-float-body" id="mushaf-page"></div>
     </div>
 
     <div class="section-header">OFFLINE MODE</div>
@@ -1581,10 +1581,27 @@
         let guard = 0;
         while (guard++ < 4) {
             const mid = pageEl.querySelector('.mf-frame-mid');
-            const cw = mid.clientWidth;
-            const over = [...mid.children].find(l => l.scrollWidth > cw + 0.5);
-            if (!over) break;
-            fs = Math.max(12, Math.floor(fs * cw / over.scrollWidth * 10) / 10);
+            const mr = mid.getBoundingClientRect();
+            const cw = mr.right - mr.left;
+            // RTL-safe overflow: nowrap Arabic lines end at the LEFT edge, where
+            // Chrome's scrollWidth under-reports overflow. Measure the actual
+            // content extent of every line's verse spans against the container.
+            let worst = null, worstW = 0;
+            for (const line of mid.children) {
+                let left = Infinity, right = -Infinity;
+                for (const s of line.querySelectorAll('.mf-verse')) {
+                    const r = s.getBoundingClientRect();
+                    if (r.left < left) left = r.left;
+                    if (r.right > right) right = r.right;
+                }
+                if (left === Infinity) continue;
+                if (left < mr.left - 0.5 || right > mr.right + 0.5) {
+                    const w = right - left;
+                    if (w > worstW) { worstW = w; worst = line; }
+                }
+            }
+            if (!worst) break;
+            fs = Math.max(12, Math.floor(fs * cw / worstW * 10) / 10);
             html = buildPlainHtml(slots, lineNums, fs, fontFamily);
             pageEl.innerHTML = frameHtml(fs);
         }
