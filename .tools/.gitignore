@@ -1,0 +1,16 @@
+# Tooling workspace — generated artifacts, not part of the app
+pages/
+new/
+.venv/
+crops*/
+sheet*.png
+preview*.png
+compare*.png
+vz*.png
+roi_*.png
+annotated*.png
+build_report.txt
+qa_report.txt
+dl_failures.txt
+__pycache__/
+centers/
