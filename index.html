@@ -68,21 +68,47 @@
             transform: scale(1.05);
         }
 
-        /* Mushaf (per-ayah flash-card cloze view) */
-        .mushaf-panel {
-            padding: 12px;
+        /* Mushaf — floating QCF text-rendered window (exact mushaf layout, per-ayah cloze) */
+        .mushaf-float {
+            position: fixed;
+            z-index: 10000;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(94vw, 460px);
+            max-height: 82vh;
             display: none;
+            flex-direction: column;
+            background: #FDFBF4;
+            border-radius: 16px;
+            box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.08);
+            overflow: hidden;
         }
-        .mushaf-panel.visible { display: block; }
-        .mushaf-header {
+        .mushaf-float.visible { display: flex; }
+        .mushaf-float-header {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 8px;
+            padding: 10px 12px;
+            background: #3F5E68;
+            color: #fff;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+            flex-shrink: 0;
+        }
+        .mushaf-float-header:active { cursor: grabbing; }
+        .mushaf-float-title {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 700;
+            text-align: center;
+            line-height: 1.35;
+            pointer-events: none;
         }
         .mushaf-nav {
             border: none;
-            background: #3F5E68;
+            background: rgba(255,255,255,.18);
             color: #FFFFFF;
             border-radius: 10px;
             width: 40px;
@@ -91,70 +117,108 @@
             cursor: pointer;
             flex-shrink: 0;
         }
-        .mushaf-nav:hover { background: #334B54; }
+        .mushaf-nav:hover { background: rgba(255,255,255,.3); }
         .mushaf-nav:disabled { opacity: 0.4; cursor: not-allowed; }
-        .mushaf-info {
-            flex: 1;
-            text-align: center;
-            font-size: 13px;
-            font-weight: 600;
-            color: #2D3748;
-            line-height: 1.4;
+        .mushaf-float-close {
+            border: none;
+            background: rgba(255,255,255,.18);
+            color: #fff;
+            border-radius: 10px;
+            width: 36px;
+            height: 36px;
+            font-size: 14px;
+            cursor: pointer;
+            flex-shrink: 0;
         }
-        .mushaf-page {
+        .mushaf-float-close:hover { background: #E53E3E; }
+        .mushaf-float-body {
+            overflow-y: auto;
+            padding: 18px 16px 14px;
             background: #FDFBF4;
-            border-radius: 12px;
-            padding: 12px 14px;
-            min-height: 60px;
+            flex: 1;
         }
         .mushaf-loading {
             text-align: center;
             color: #8E919D;
             font-size: 13px;
-            padding: 20px 0;
+            padding: 30px 0;
         }
-        .mushaf-verse {
-            position: relative;
-            padding: 10px 4px;
-            border-bottom: 1px solid #E8E0CC;
-            cursor: pointer;
-            border-radius: 8px;
-        }
-        .mushaf-verse:last-child { border-bottom: none; }
-        .mushaf-verse-text {
+        .mf-line {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 1.35em;
             direction: rtl;
-            text-align: justify;
-            font-size: 21px;
-            line-height: 2;
-            font-family: 'KFGQPC Uthmanic Script HAFS', 'Amiri', 'Scheherazade New', 'Noto Naskh Arabic', 'Geeza Pro', serif;
-            color: #1A1A1A;
         }
-        .mushaf-verse-end {
+        .mf-verse {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+        .mf-verse:hover { background: rgba(19,50,112,.06); }
+        .mf-word { display: inline-block; white-space: pre; }
+        .mf-end {
             color: #B8860B;
-            font-size: 15px;
-            margin-inline-start: 6px;
+            font-family: 'Geeza Pro', 'KFGQPC Uthmanic Script HAFS', serif;
+            font-size: .55em;
+            font-weight: 700;
+            margin: 0 .55em;
             white-space: nowrap;
         }
-        .mushaf-cloze {
-            display: none;
+        .mf-cover {
             position: absolute;
-            inset: 0;
-            background: #2D3748;
+            inset: -3px -2px;
+            background: linear-gradient(140deg, #2E4A7A, #1B2F52);
             color: #FFFFFF;
+            border-radius: 8px;
+            display: none;
             align-items: center;
             justify-content: center;
-            font-size: 22px;
-            font-weight: 600;
-            border-radius: 8px;
+            font-family: 'Geeza Pro', sans-serif;
+            font-size: .5em;
+            font-weight: 700;
+            z-index: 3;
+            box-shadow: 0 2px 8px rgba(0,0,0,.28);
         }
-        .mushaf-verse.covered .mushaf-cloze { display: flex; }
-        .mushaf-verse.covered .mushaf-verse-text { visibility: hidden; }
-        .mushaf-controls {
+        .mf-verse.covered .mf-cover { display: flex; }
+        .mf-verse.covered .mf-word { visibility: hidden; }
+        .mf-verse.covered .mf-end { visibility: hidden; }
+        .mf-surah-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 6px 0 8px;
+            padding: 7px 10px;
+            background: linear-gradient(180deg, #F3E9D2, #EAD9B4);
+            border: 1.5px solid #C9A96A;
+            border-radius: 12px;
+            direction: rtl;
+        }
+        .mf-surah-header .orn { color: #A9803B; font-size: 15px; }
+        .mf-surah-header .name {
+            font-size: 17px;
+            font-weight: 700;
+            color: #5C4013;
+            font-family: 'Geeza Pro', 'KFGQPC Uthmanic Script HAFS', serif;
+        }
+        .mf-bismillah {
+            text-align: center;
+            direction: rtl;
+            margin: 2px 0 6px;
+            color: #1A1A1A;
+            line-height: 1.6;
+        }
+        .mushaf-float-controls {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-top: 10px;
-            flex-wrap: wrap;
+            padding: 10px 12px;
+            background: #F4EFE2;
+            border-top: 1px solid #E8E0CC;
+            flex-shrink: 0;
         }
         .mushaf-reset {
             border: none;
@@ -170,6 +234,8 @@
         .mushaf-hint {
             font-size: 12px;
             color: #8E919D;
+            flex: 1;
+            text-align: center;
         }
         .mushaf-caption {
             text-align: center;
@@ -178,13 +244,14 @@
             font-weight: 600;
             margin-top: 10px;
         }
-        body.dark-mode .mushaf-nav { background: #2D3748; }
-        body.dark-mode .mushaf-nav:hover { background: #3A4A5C; }
-        body.dark-mode .mushaf-info { color: #E2E8F0; }
-        body.dark-mode .mushaf-page { background: #1A232E; }
-        body.dark-mode .mushaf-verse { border-bottom-color: #2D3748; }
-        body.dark-mode .mushaf-verse-text { color: #E2E8F0; }
-        body.dark-mode .mushaf-cloze { background: #4A5568; }
+        body.dark-mode .mushaf-float { background: #1A232E; box-shadow: 0 18px 50px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.06); }
+        body.dark-mode .mushaf-float-body { background: #1A232E; }
+        body.dark-mode .mushaf-float-controls { background: #141B24; border-top-color: #2D3748; }
+        body.dark-mode .mf-word { color: #E2E8F0; }
+        body.dark-mode .mf-end { color: #D4AF37; }
+        body.dark-mode .mf-surah-header { background: linear-gradient(180deg, #2A3450, #1F2940); border-color: #4A5568; }
+        body.dark-mode .mf-surah-header .name { color: #E8D5A0; }
+        body.dark-mode .mf-bismillah { color: #E2E8F0; }
         body.dark-mode .mushaf-caption { color: #7FB3A8; }
         body.dark-mode .theme-toggle.active { background: #2D3748; border-color: #2D3748; }
 
@@ -811,19 +878,19 @@
         <div style="height: 10px;"></div>
     </div>
 
-    <div class="section-header">MUSHAF — HAFS, TAJWEED</div>
-    <div class="section-panel mushaf-panel" id="mushaf-panel">
-        <div class="mushaf-header">
-            <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(-1)">◀</button>
-            <div class="mushaf-info" id="mushaf-info">Loading…</div>
-            <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(1)">▶</button>
+    <!-- Floating Mushaf window (QCF text-rendered, per-ayah cloze at exact positions) -->
+    <div class="mushaf-float" id="mushaf-panel">
+        <div class="mushaf-float-header" id="mushaf-drag">
+            <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(-1)" aria-label="Previous page">◀</button>
+            <div class="mushaf-float-title" id="mushaf-info">Loading…</div>
+            <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(1)" aria-label="Next page">▶</button>
+            <button class="mushaf-float-close" id="mushaf-close" onclick="toggleMushaf()" aria-label="Close Mushaf">✕</button>
         </div>
-        <div class="mushaf-page" id="mushaf-page"></div>
-        <div class="mushaf-controls">
-            <button class="mushaf-reset" onclick="mushafRevealAll()">Reveal all</button>
-            <span class="mushaf-hint">👆 Tap any verse to cover / reveal it — flash-card style</span>
+        <div class="mushaf-float-body" id="mushaf-page"></div>
+        <div class="mushaf-float-controls">
+            <button class="mushaf-reset" onclick="mushafRevealAll()">👁 Reveal all</button>
+            <span class="mushaf-hint">👆 Tap a verse to cover / reveal</span>
         </div>
-        <div class="mushaf-caption">Al-Quran Al-Kareem · Hafs — Tajweed · Dar al-Marefa Edition</div>
     </div>
 
     <div class="section-header">OFFLINE MODE</div>
@@ -1107,31 +1174,85 @@
     }
 
     // --- Mushaf (per-ayah flash-card cloze view) ---
-    const MUSHAF_TEXT_API = 'https://api.qurancdn.com/api/v4/quran/verses/uthmani?chapter_number=';
+    // --- Mushaf: floating window rendered with official QCF page fonts ---
+    // The QCF fonts are positional: rendering each page's words (grouped by the
+    // API's line_number) reproduces the exact printed mushaf layout, so every
+    // ayah lands at its exact on-page position and the cloze covers it precisely.
+    const MUSHAF_WORDS_API = 'https://api.qurancdn.com/api/v4/verses/by_page/';
+    const MUSHAF_FONT_BASE = 'https://raw.githubusercontent.com/quran/quran.com-images/master/res/fonts/';
+    const SURAH_NAMES_AR = {"1":"الفاتحة","2":"البقرة","3":"آل عمران","4":"النساء","5":"المائدة","6":"الأنعام","7":"الأعراف","8":"الأنفال","9":"التوبة","10":"يونس","11":"هود","12":"يوسف","13":"الرعد","14":"ابراهيم","15":"الحجر","16":"النحل","17":"الإسراء","18":"الكهف","19":"مريم","20":"طه","21":"الأنبياء","22":"الحج","23":"المؤمنون","24":"النور","25":"الفرقان","26":"الشعراء","27":"النمل","28":"القصص","29":"العنكبوت","30":"الروم","31":"لقمان","32":"السجدة","33":"الأحزاب","34":"سبإ","35":"فاطر","36":"يس","37":"الصافات","38":"ص","39":"الزمر","40":"غافر","41":"فصلت","42":"الشورى","43":"الزخرف","44":"الدخان","45":"الجاثية","46":"الأحقاف","47":"محمد","48":"الفتح","49":"الحجرات","50":"ق","51":"الذاريات","52":"الطور","53":"النجم","54":"القمر","55":"الرحمن","56":"الواقعة","57":"الحديد","58":"المجادلة","59":"الحشر","60":"الممتحنة","61":"الصف","62":"الجمعة","63":"المنافقون","64":"التغابن","65":"الطلاق","66":"التحريم","67":"الملك","68":"القلم","69":"الحاقة","70":"المعارج","71":"نوح","72":"الجن","73":"المزمل","74":"المدثر","75":"القيامة","76":"الانسان","77":"المرسلات","78":"النبإ","79":"النازعات","80":"عبس","81":"التكوير","82":"الإنفطار","83":"المطففين","84":"الإنشقاق","85":"البروج","86":"الطارق","87":"الأعلى","88":"الغاشية","89":"الفجر","90":"البلد","91":"الشمس","92":"الليل","93":"الضحى","94":"الشرح","95":"التين","96":"العلق","97":"القدر","98":"البينة","99":"الزلزلة","100":"العاديات","101":"القارعة","102":"التكاثر","103":"العصر","104":"الهمزة","105":"الفيل","106":"قريش","107":"الماعون","108":"الكوثر","109":"الكافرون","110":"النصر","111":"المسد","112":"الإخلاص","113":"الفلق","114":"الناس"};
     let mushafPage = 1;
-    const mushafTexts = {}; // surah -> { ayahNum: text_uthmani }
+    const qcfFonts = {};      // page -> loaded font family name
+    const pageWords = {};     // page -> {lines: {lineNum: [{text,type,surah,ayah}]}}
+    let bismillahFontReady = null;
 
     function toArabicDigits(n) {
         return String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
     }
 
-    async function getSurahText(s) {
-        if (mushafTexts[s]) return mushafTexts[s];
-        const cached = localStorage.getItem('qp_uthmani_' + s);
+    async function loadQcfFont(page) {
+        const name = 'QCF_P' + String(page).padStart(3, '0');
+        if (qcfFonts[page]) return qcfFonts[page];
+        if (document.fonts.check(`16px "${name}"`)) { qcfFonts[page] = name; return name; }
+        try {
+            const f = new FontFace(name, `url(${MUSHAF_FONT_BASE}${name}.TTF)`);
+            await f.load();
+            document.fonts.add(f);
+            qcfFonts[page] = name;
+            return name;
+        } catch (e) {
+            qcfFonts[page] = null; // fall back to system Arabic font
+            return null;
+        }
+    }
+
+    async function loadBismillahFont() {
+        if (bismillahFontReady) return bismillahFontReady;
+        try {
+            const f = new FontFace('QCF_BSML', `url(${MUSHAF_FONT_BASE}QCF_BSML.TTF)`);
+            await f.load();
+            document.fonts.add(f);
+            bismillahFontReady = 'QCF_BSML';
+        } catch (e) { bismillahFontReady = null; }
+        return bismillahFontReady;
+    }
+
+    async function getPageWords(p) {
+        if (pageWords[p]) return pageWords[p];
+        const cached = localStorage.getItem('qp_pagewords_' + p);
         if (cached) {
-            try { mushafTexts[s] = JSON.parse(cached); return mushafTexts[s]; } catch (e) {}
+            try { pageWords[p] = JSON.parse(cached); return pageWords[p]; } catch (e) {}
         }
         try {
-            const res = await fetch(MUSHAF_TEXT_API + s);
+            const res = await fetch(`${MUSHAF_WORDS_API}${p}?per_page=50&words=true&word_fields=text_uthmani,line_number,position,page_number,char_type_name`);
             const data = await res.json();
-            const map = {};
-            (data.verses || []).forEach(v => { map[parseInt(v.verse_key.split(':')[1])] = v.text_uthmani; });
-            mushafTexts[s] = map;
-            try { localStorage.setItem('qp_uthmani_' + s, JSON.stringify(map)); } catch (e) {}
-            return map;
+            const lines = {};
+            (data.verses || []).forEach(v => {
+                const surah = parseInt(v.verse_key.split(':')[0]);
+                const ayah = parseInt(v.verse_key.split(':')[1]);
+                v.words.forEach(w => {
+                    const ln = w.line_number;
+                    if (!lines[ln]) lines[ln] = [];
+                    lines[ln].push({
+                        text: w.text_uthmani,
+                        type: w.char_type_name === 'end' ? 'end' : 'word',
+                        surah, ayah
+                    });
+                });
+            });
+            pageWords[p] = lines;
+            try { localStorage.setItem('qp_pagewords_' + p, JSON.stringify(lines)); } catch (e) {}
+            return lines;
         } catch (e) {
             return null;
         }
+    }
+
+    function mushafFontSize() {
+        // Match quran.com's generator ratio: ptsize = page width / 21.
+        const panel = document.getElementById('mushaf-panel');
+        const w = panel ? panel.getBoundingClientRect().width : 460;
+        return Math.max(20, Math.round(w / 21));
     }
 
     function pageInfo(p) {
@@ -1147,37 +1268,95 @@
         const { first, last } = pageInfo(p);
         info.textContent = first && last
             ? (first.surahNum === last.surahNum
-                ? `Page ${p} · ${first.surahName} ${first.ayahNum}–${last.ayahNum}`
-                : `Page ${p} · ${first.surahName} ${first.ayahNum} – ${last.surahName} ${last.ayahNum}`)
-            : `Page ${p}`;
+                ? `📖 Page ${p} · ${first.surahName} ${first.ayahNum}–${last.ayahNum}`
+                : `📖 Page ${p} · ${first.surahName} ${first.ayahNum} – ${last.surahName} ${last.ayahNum}`)
+            : `📖 Page ${p}`;
         document.getElementById('mushaf-prev').disabled = p <= 1;
         document.getElementById('mushaf-next').disabled = p >= 604;
 
         const pageEl = document.getElementById('mushaf-page');
         pageEl.innerHTML = '<div class="mushaf-loading">Loading…</div>';
 
-        const verses = allAyahs.filter(a => a.page === p);
-        const surahs = [...new Set(verses.map(v => v.surahNum))];
-        await Promise.all(surahs.map(getSurahText));
-        if (mushafPage !== p) return; // navigated away while fetching
-
-        let html = '';
-        for (const v of verses) {
-            const text = (mushafTexts[v.surahNum] || {})[v.ayahNum] || '';
-            html += `<div class="mushaf-verse" onclick="toggleVerseCloze(this)">
-                <div class="mushaf-verse-text">${text} <span class="mushaf-verse-end">﴿${toArabicDigits(v.ayahNum)}﴾</span></div>
-                <div class="mushaf-cloze">${toArabicDigits(v.ayahNum)}</div>
-            </div>`;
+        const [fontName, lines, _bsml] = await Promise.all([loadQcfFont(p), getPageWords(p), loadBismillahFont()]);
+        if (mushafPage !== p || !document.getElementById('mushaf-panel').classList.contains('visible')) return;
+        if (!lines) {
+            pageEl.innerHTML = '<div class="mushaf-loading">Could not load page. Check connection.</div>';
+            return;
         }
-        pageEl.innerHTML = html || '<div class="mushaf-loading">No verses on this page.</div>';
+
+        // Build the 15 mushaf lines. Missing line numbers = surah header / bismillah slots.
+        const lineNums = Object.keys(lines).map(Number).sort((a, b) => a - b);
+        const fs = mushafFontSize();
+        let html = '';
+        let prevLine = 0;
+        let lastSurah = null;
+
+        for (const ln of lineNums) {
+            const gap = ln - prevLine - 1;
+            const surahOfLine = lines[ln][0].surah;
+            const startsNewSurah = surahOfLine !== lastSurah;
+
+            if (gap > 0 && startsNewSurah) {
+                // gap of 2 → surah header + bismillah; gap of 1 → header only (surah 1 or 9)
+                if (gap >= 2) {
+                    html += surahHeaderHtml(surahOfLine);
+                    html += bismillahHtml(fs);
+                } else {
+                    html += surahHeaderHtml(surahOfLine);
+                }
+            }
+
+            // render the line: group consecutive words into verse fragments
+            let lineHtml = `<div class="mf-line" style="font-size:${fs}px;${fontName ? `font-family:'${fontName}';` : ''}line-height:1.35;">`;
+            let curVerse = null;
+            let frag = '';
+            const flush = () => {
+                if (frag) {
+                    lineHtml += `<span class="mf-verse" data-vkey="${curVerse}" onclick="toggleVerseCloze(this)">
+                        ${frag}
+                        <span class="mf-cover">${toArabicDigits(curVerse.split(':')[1])}</span>
+                    </span>`;
+                    frag = '';
+                }
+            };
+            for (const w of lines[ln]) {
+                const vkey = w.surah + ':' + w.ayah;
+                if (vkey !== curVerse) { flush(); curVerse = vkey; }
+                frag += w.type === 'end'
+                    ? `<span class="mf-end">﴿${toArabicDigits(w.ayah)}﴾</span>`
+                    : `<span class="mf-word">${w.text}</span>`;
+            }
+            flush();
+            lineHtml += '</div>';
+            html += lineHtml;
+
+            prevLine = ln;
+            lastSurah = surahOfLine;
+        }
+
+        pageEl.innerHTML = html;
+    }
+
+    function surahHeaderHtml(surah) {
+        const name = SURAH_NAMES_AR[surah] || '';
+        return `<div class="mf-surah-header"><span class="orn">۞</span><span class="name">سُورَةُ ${name}</span><span class="orn">۞</span></div>`;
+    }
+
+    function bismillahHtml(fs) {
+        const fontStyle = bismillahFontReady ? `font-family:'${bismillahFontReady}';` : '';
+        return `<div class="mf-bismillah" style="font-size:${fs}px;${fontStyle}">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</div>`;
     }
 
     function toggleVerseCloze(el) {
-        el.classList.toggle('covered');
+        const vkey = el.dataset.vkey;
+        const nowCovered = el.classList.contains('covered');
+        document.querySelectorAll(`#mushaf-page .mf-verse[data-vkey="${vkey}"]`).forEach(v => {
+            v.classList.toggle('covered', !nowCovered);
+        });
     }
 
     function mushafRevealAll() {
-        document.querySelectorAll('#mushaf-page .mushaf-verse').forEach(el => el.classList.remove('covered'));
+        document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.remove('covered'));
     }
 
     function toggleMushaf() {
@@ -1187,9 +1366,9 @@
         panel.classList.toggle('visible', show);
         btn.classList.toggle('active', show);
         if (show) {
+            loadBismillahFont();
             const a = allAyahs[selStartIdx];
             showMushafPage(a ? a.page : mushafPage);
-            setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
         }
     }
 
@@ -1204,6 +1383,32 @@
     function mushafGo(dir) {
         showMushafPage(mushafPage + dir);
     }
+
+    // Floating window: draggable via its header
+    (function initMushafDrag() {
+        const header = document.getElementById('mushaf-drag');
+        if (!header) return;
+        const panel = document.getElementById('mushaf-panel');
+        let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
+        header.addEventListener('pointerdown', e => {
+            if (e.target.closest('button')) return; // don't drag from buttons
+            dragging = true;
+            sx = e.clientX; sy = e.clientY;
+            const r = panel.getBoundingClientRect();
+            ox = r.left; oy = r.top;
+            header.setPointerCapture(e.pointerId);
+        });
+        header.addEventListener('pointermove', e => {
+            if (!dragging) return;
+            const nx = Math.min(window.innerWidth - 60, Math.max(8, ox + e.clientX - sx));
+            const ny = Math.min(window.innerHeight - 80, Math.max(8, oy + e.clientY - sy));
+            panel.style.left = nx + 'px';
+            panel.style.top = ny + 'px';
+            panel.style.transform = 'none';
+        });
+        header.addEventListener('pointerup', () => { dragging = false; });
+        header.addEventListener('pointercancel', () => { dragging = false; });
+    })();
 
     function selectAdjust(element, mode) {
         const parent = element.parentElement;
