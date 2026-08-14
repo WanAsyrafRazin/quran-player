@@ -691,7 +691,7 @@
             <button id="dl-mujawwad" class="dl-btn" onclick="downloadRecitation('mujawwad_timestamps.json')">⬇ Download Mujawwad — 1.3 GB</button>
         </div>
         <div id="dl-progress" class="dl-progress" style="display:none;"></div>
-        <div class="offline-hint">💡 <b>Install:</b> iPhone/iPad Safari → Share → <b>Add to Home Screen</b>. Then open the app icon (full-screen, like a native app). Audio is cached automatically whenever you play a surah — or grab everything with the buttons above. Keep the app open while downloading. Works in airplane mode once cached.</div>
+        <div class="offline-hint">💡 <b>Install:</b> iPhone/iPad Safari → Share → <b>Add to Home Screen</b>. Then open the app icon (full-screen, like a native app). Audio is <b>saved permanently on your device</b> whenever you play a surah — or grab everything with the buttons above. Files survive app updates. Keep the app open while downloading. Works in airplane mode once saved.</div>
     </div>
 </div>
 
@@ -1413,16 +1413,23 @@
         if (idx < 0) idx = playlist.length - 1;
         currentAyahIndex = idx;
         currentAyahRepeatCount = 1;
-        if (audioPlayer.src !== playlist[idx].audio_url) {
-            audioPlayer.src = playlist[idx].audio_url;
-            audioPlayer.load();
-        }
-        audioPlayer.currentTime = target;
-        updateNowPlaying();
-        if (isPlaying) {
-            audioPlayer.play();
-            audioPlayer.ontimeupdate = handleTimeUpdate;
-        }
+        const v = playlist[idx];
+        const start = () => {
+            const tgtSrc = srcOf(v.audio_url);
+            if (audioPlayer.src !== tgtSrc) {
+                audioPlayer.src = tgtSrc;
+                audioPlayer.load();
+            }
+            audioPlayer.currentTime = target;
+            updateNowPlaying();
+            if (isPlaying) {
+                audioPlayer.play();
+                audioPlayer.ontimeupdate = handleTimeUpdate;
+            }
+            syncMediaPosition();
+        };
+        if (audioSrcMap[v.audio_url]) start();
+        else resolveAudioSrc(v.audio_url).then(start);
     }
 
     // Notification seek buttons: ±10s within the selection
@@ -1470,15 +1477,26 @@
 
         updateNowPlaying();
 
-        if (audioPlayer.src !== currentVerse.audio_url) {
-            audioPlayer.src = currentVerse.audio_url;
+        const wantUrl = currentVerse.audio_url;
+        if (audioSrcMap[wantUrl]) {
+            startVerse(currentVerse, audioSrcMap[wantUrl]);
+        } else {
+            // not resolved yet — check permanent storage, then play
+            resolveAudioSrc(wantUrl).then(src => {
+                if (playlist[currentAyahIndex] !== currentVerse) return; // selection changed meanwhile
+                startVerse(currentVerse, src);
+            });
+        }
+    }
+
+    function startVerse(v, src) {
+        if (audioPlayer.src !== src) {
+            audioPlayer.src = src;
             audioPlayer.load();
         }
-
-        audioPlayer.currentTime = currentVerse.start_time;
+        audioPlayer.currentTime = v.start_time;
         audioPlayer.playbackRate = playbackSpeed;
         audioPlayer.play();
-
         audioPlayer.ontimeupdate = handleTimeUpdate;
         syncMediaPosition();
     }
@@ -1522,7 +1540,7 @@
         }
 
         const nextVerse = playlist[currentAyahIndex];
-        if (audioPlayer.src === nextVerse.audio_url) {
+        if (audioPlayer.src === srcOf(nextVerse.audio_url)) {
              updateNowPlaying();
              audioPlayer.ontimeupdate = handleTimeUpdate;
         } else {
@@ -1534,79 +1552,193 @@
         if (isPlaying) handleVerseEnd();
     };
 
-    // --- Offline Mode (PWA) ---
+    // --- Offline Mode (permanent audio via IndexedDB — survives app updates) ---
+    const AUDIO_DB = 'quran-player-audio';
+    const AUDIO_STORE = 'files';
+    let audioDB = null;
+    let downloading = false;
+
     function isAudioUrl(url) {
         return /mirrors\.quranicaudio\.com|server12\.mp3quran\.net|download\.quranicaudio\.com/.test(url);
     }
 
-    async function countCachedAudio() {
+    function openAudioDB() {
+        return new Promise((resolve, reject) => {
+            if (audioDB) return resolve(audioDB);
+            if (!('indexedDB' in window)) return reject(new Error('no indexedDB'));
+            const req = indexedDB.open(AUDIO_DB, 1);
+            req.onupgradeneeded = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains(AUDIO_STORE)) db.createObjectStore(AUDIO_STORE);
+            };
+            req.onsuccess = () => { audioDB = req.result; resolve(audioDB); };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    function idbGet(url) {
+        return openAudioDB().then(db => new Promise((res, rej) => {
+            const rq = db.transaction(AUDIO_STORE, 'readonly').objectStore(AUDIO_STORE).get(url);
+            rq.onsuccess = () => res(rq.result || null);
+            rq.onerror = () => rej(rq.error);
+        })).catch(() => null);
+    }
+
+    function idbSet(url, blob) {
+        return openAudioDB().then(db => new Promise((res, rej) => {
+            const tx = db.transaction(AUDIO_STORE, 'readwrite');
+            tx.objectStore(AUDIO_STORE).put(blob, url);
+            tx.oncomplete = () => res(true);
+            tx.onerror = () => rej(tx.error);
+        }));
+    }
+
+    function idbKeys() {
+        return openAudioDB().then(db => new Promise((res, rej) => {
+            const rq = db.transaction(AUDIO_STORE, 'readonly').objectStore(AUDIO_STORE).getAllKeys();
+            rq.onsuccess = () => res(rq.result || []);
+            rq.onerror = () => rej(rq.error);
+        })).catch(() => []);
+    }
+
+    // Resolve a network audio URL to a playable src: blob URL if permanently saved, else network
+    const audioSrcMap = {};        // network url -> resolved src (blob: or url)
+    const audioCacheInFlight = new Set();
+
+    function resolveAudioSrc(url) {
+        if (audioSrcMap[url]) return Promise.resolve(audioSrcMap[url]);
+        return idbGet(url).then(blob => {
+            if (blob) {
+                audioSrcMap[url] = URL.createObjectURL(blob);
+            } else {
+                audioSrcMap[url] = url;
+                cacheAudioOnPlay(url); // save it permanently in the background
+            }
+            return audioSrcMap[url];
+        });
+    }
+
+    function srcOf(url) { return audioSrcMap[url] || url; }
+
+    async function cacheAudioOnPlay(url) {
+        if (audioCacheInFlight.has(url)) return;
+        audioCacheInFlight.add(url);
         try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const blob = await res.blob();
+            await idbSet(url, blob);
+            updateOfflineStatus();
+        } catch (e) {
+            console.warn('Audio save failed:', url, e);
+        } finally {
+            audioCacheInFlight.delete(url);
+        }
+    }
+
+    // Copy audio cached by older app versions (SW cache) into permanent storage
+    async function migrateCacheAudio() {
+        try {
+            if (!('caches' in window)) return;
             const keys = await caches.keys();
-            let n = 0;
             for (const k of keys) {
                 const c = await caches.open(k);
                 const reqs = await c.keys();
-                n += reqs.filter(r => isAudioUrl(r.url)).length;
+                for (const rq of reqs) {
+                    if (!isAudioUrl(rq.url)) continue;
+                    if (await idbGet(rq.url)) continue;
+                    const resp = await c.match(rq);
+                    if (resp && resp.ok) await idbSet(rq.url, await resp.blob());
+                }
             }
-            return n;
-        } catch (e) { return 0; }
+        } catch (e) { /* non-fatal */ }
+        updateOfflineStatus();
+    }
+
+    // Ask the browser to keep our storage even under storage pressure
+    async function requestPersistentStorage() {
+        try {
+            if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
+        } catch (e) {}
     }
 
     async function updateOfflineStatus() {
         const el = document.getElementById('offline-status');
-        if (!('serviceWorker' in navigator) || !('caches' in window)) {
+        if (!('indexedDB' in window)) {
             el.textContent = 'Offline mode not supported in this browser.';
             return;
         }
-        const n = await countCachedAudio();
+        const keys = await idbKeys();
+        let mur = 0, muj = 0;
+        for (const k of keys) {
+            if (k.includes('tvquran')) mur++;
+            else if (k.includes('server12')) muj++;
+        }
+        const total = mur + muj;
+        const murDone = mur >= 114, mujDone = muj >= 114;
+
         el.textContent = navigator.onLine
-            ? `● Online — ${n} of 228 audio files cached (playing a surah caches it automatically)`
-            : `● Offline — ${n} audio files cached. Playback works for cached surahs.`;
+            ? `● Online — ${total} of 228 audio files saved permanently (playing a surah saves it automatically)`
+            : `● Offline — ${total} audio files saved. Playback works for saved surahs.`;
+        if (murDone && mujDone) el.textContent += ' Fully offline! 🎉';
+
+        const bm = document.getElementById('dl-murattal');
+        const bj = document.getElementById('dl-mujawwad');
+        bm.disabled = murDone || downloading;
+        bj.disabled = mujDone || downloading;
+        bm.innerHTML = murDone ? '✅ Murattal (fast) — saved (114/114)' : '⬇ Download Murattal (fast) — 628 MB';
+        bj.innerHTML = mujDone ? '✅ Mujawwad — saved (114/114)' : '⬇ Download Mujawwad — 1.3 GB';
     }
 
-    let downloading = false;
     async function downloadRecitation(recFile) {
         if (downloading) return;
-        if (!('serviceWorker' in navigator) || !('caches' in window)) {
-            alert('Offline mode is not supported in this browser. Use Safari on iPhone/iPad.');
+        if (!('indexedDB' in window)) {
+            alert('Offline mode is not supported in this browser. Use Chrome/Safari on mobile.');
             return;
         }
-        const btnM = document.getElementById('dl-murattal');
-        const btnJ = document.getElementById('dl-mujawwad');
         const progressEl = document.getElementById('dl-progress');
-        const reg = await navigator.serviceWorker.ready;
-        const res = await fetch(recFile);
-        const db = await res.json();
-        const urls = Object.keys(db).map(k => db[k].audio_url);
 
         downloading = true;
-        btnM.disabled = true;
-        btnJ.disabled = true;
+        document.getElementById('dl-murattal').disabled = true;
+        document.getElementById('dl-mujawwad').disabled = true;
         progressEl.style.display = 'block';
-        progressEl.textContent = `Starting download of ${urls.length} surahs...`;
+        progressEl.textContent = 'Preparing…';
 
-        reg.active.postMessage({ type: 'CACHE_AUDIOS', urls });
+        try {
+            const res = await fetch(recFile);
+            const db = await res.json();
+            const urls = [...new Set(Object.values(db).map(x => x.audio_url))];
+
+            let done = 0;
+            for (const url of urls) {
+                if (await idbGet(url)) { done++; continue; }
+                try {
+                    const r = await fetch(url);
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    await idbSet(url, await r.blob());
+                    done++;
+                    progressEl.textContent =
+                        `Downloading… ${done}/${urls.length} (${Math.round(done / urls.length * 100)}%) — surah ${url.split('/').pop().replace('.mp3', '')}`;
+                } catch (e) {
+                    progressEl.textContent = `⚠ Failed at surah ${url.split('/').pop()} (${e.message}). Press the button again to resume — files already saved are kept.`;
+                    downloading = false;
+                    updateOfflineStatus();
+                    return;
+                }
+            }
+            progressEl.textContent = `✅ Done! ${done} surahs saved permanently.`;
+        } catch (e) {
+            progressEl.textContent = '⚠ Could not load the recitation list. Try again.';
+        }
+        downloading = false;
+        updateOfflineStatus();
     }
 
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.addEventListener('message', (e) => {
-            const d = e.data;
-            if (!d) return;
-            const progressEl = document.getElementById('dl-progress');
-            if (d.type === 'CACHE_PROGRESS') {
-                const pct = Math.round(d.done / d.total * 100);
-                progressEl.textContent = `Downloading… ${d.done}/${d.total} (${pct}%) — surah ${d.current.split('/').pop().replace('.mp3','')}`;
-            } else if (d.type === 'CACHE_DONE') {
-                progressEl.textContent = `✅ Done! ${d.done} surahs saved for offline use.`;
-                document.getElementById('dl-murattal').disabled = false;
-                document.getElementById('dl-mujawwad').disabled = false;
-                downloading = false;
-                updateOfflineStatus();
-            }
-        });
-
         navigator.serviceWorker.register('sw.js')
             .then(() => {
+                requestPersistentStorage();
+                migrateCacheAudio();
                 updateOfflineStatus();
                 window.addEventListener('online', updateOfflineStatus);
                 window.addEventListener('offline', updateOfflineStatus);
