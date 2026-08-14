@@ -68,10 +68,12 @@
             transform: scale(1.05);
         }
 
-        /* Mushaf (tajweed page) */
+        /* Mushaf (per-ayah flash-card cloze view) */
         .mushaf-panel {
             padding: 12px;
+            display: none;
         }
+        .mushaf-panel.visible { display: block; }
         .mushaf-header {
             display: flex;
             align-items: center;
@@ -99,35 +101,60 @@
             color: #2D3748;
             line-height: 1.4;
         }
-        .mushaf-wrap {
+        .mushaf-page {
+            background: #FDFBF4;
+            border-radius: 12px;
+            padding: 12px 14px;
+            min-height: 60px;
+        }
+        .mushaf-loading {
+            text-align: center;
+            color: #8E919D;
+            font-size: 13px;
+            padding: 20px 0;
+        }
+        .mushaf-verse {
             position: relative;
-            border-radius: 12px;
-            overflow: hidden;
-            background: #FFFFFF;
+            padding: 10px 4px;
+            border-bottom: 1px solid #E8E0CC;
+            cursor: pointer;
+            border-radius: 8px;
         }
-        .mushaf-img {
-            width: 100%;
-            display: block;
-            border-radius: 12px;
+        .mushaf-verse:last-child { border-bottom: none; }
+        .mushaf-verse-text {
+            direction: rtl;
+            text-align: justify;
+            font-size: 21px;
+            line-height: 2;
+            font-family: 'KFGQPC Uthmanic Script HAFS', 'Amiri', 'Scheherazade New', 'Noto Naskh Arabic', 'Geeza Pro', serif;
+            color: #1A1A1A;
         }
-        .mushaf-canvas {
+        .mushaf-verse-end {
+            color: #B8860B;
+            font-size: 15px;
+            margin-inline-start: 6px;
+            white-space: nowrap;
+        }
+        .mushaf-cloze {
+            display: none;
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            cursor: crosshair;
+            inset: 0;
+            background: #2D3748;
+            color: #FFFFFF;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: 600;
+            border-radius: 8px;
         }
-        .mushaf-wrap.occluding .mushaf-canvas {
-            pointer-events: auto;
-            touch-action: none;
-        }
+        .mushaf-verse.covered .mushaf-cloze { display: flex; }
+        .mushaf-verse.covered .mushaf-verse-text { visibility: hidden; }
         .mushaf-controls {
             display: flex;
             align-items: center;
             gap: 10px;
             margin-top: 10px;
+            flex-wrap: wrap;
         }
         .mushaf-reset {
             border: none;
@@ -154,7 +181,10 @@
         body.dark-mode .mushaf-nav { background: #2D3748; }
         body.dark-mode .mushaf-nav:hover { background: #3A4A5C; }
         body.dark-mode .mushaf-info { color: #E2E8F0; }
-        body.dark-mode .mushaf-wrap { background: #0D1117; }
+        body.dark-mode .mushaf-page { background: #1A232E; }
+        body.dark-mode .mushaf-verse { border-bottom-color: #2D3748; }
+        body.dark-mode .mushaf-verse-text { color: #E2E8F0; }
+        body.dark-mode .mushaf-cloze { background: #4A5568; }
         body.dark-mode .mushaf-caption { color: #7FB3A8; }
         body.dark-mode .theme-toggle.active { background: #2D3748; border-color: #2D3748; }
 
@@ -690,7 +720,7 @@
 <div class="player-container">
     <!-- Top Right Theme Toggle -->
     <div class="top-bar">
-        <button class="theme-toggle" onclick="toggleOcclusion(this)" id="occlusion-btn" aria-label="Toggle Occlusion Mode" title="Occlusion mode">🕶</button>
+        <button class="theme-toggle" onclick="toggleMushaf()" id="mushaf-toggle-btn" aria-label="Toggle Mushaf" title="Mushaf">📖</button>
         <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌙</button>
     </div>
 
@@ -782,19 +812,16 @@
     </div>
 
     <div class="section-header">MUSHAF — HAFS, TAJWEED</div>
-    <div class="section-panel mushaf-panel">
+    <div class="section-panel mushaf-panel" id="mushaf-panel">
         <div class="mushaf-header">
             <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(-1)">◀</button>
             <div class="mushaf-info" id="mushaf-info">Loading…</div>
             <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(1)">▶</button>
         </div>
-        <div class="mushaf-wrap" id="mushaf-wrap">
-            <img id="mushaf-img" class="mushaf-img" alt="Quran page" loading="lazy">
-            <canvas id="mushaf-canvas" class="mushaf-canvas"></canvas>
-        </div>
-        <div class="mushaf-controls" id="mushaf-controls" style="display:none;">
-            <button class="mushaf-reset" onclick="mushafReset()">Reveal all</button>
-            <span class="mushaf-hint">🕶 Drag over verses to hide them</span>
+        <div class="mushaf-page" id="mushaf-page"></div>
+        <div class="mushaf-controls">
+            <button class="mushaf-reset" onclick="mushafRevealAll()">Reveal all</button>
+            <span class="mushaf-hint">👆 Tap any verse to cover / reveal it — flash-card style</span>
         </div>
         <div class="mushaf-caption">Al-Quran Al-Kareem · Hafs — Tajweed · Dar al-Marefa Edition</div>
     </div>
@@ -937,7 +964,6 @@
             
             populateDropdowns();
             updateLocationBar();
-            showMushafPage(allAyahs[selStartIdx].page); // initial render (sync skips same-page)
         } catch (error) {
             console.error("Error loading data:", error);
             document.getElementById('from-verse').innerHTML = `<option>Error loading database</option>`;
@@ -1080,11 +1106,33 @@
         syncMushafFromSelection();
     }
 
-    // --- Mushaf (tajweed page display, Dar al-Marefa Hafs Tajweed edition) ---
-    const MUSHAF_BASE = 'https://raw.githubusercontent.com/QuranHub/quran-pages-images/master/easyquran.com/hafs-tajweed/';
+    // --- Mushaf (per-ayah flash-card cloze view) ---
+    const MUSHAF_TEXT_API = 'https://api.qurancdn.com/api/v4/quran/verses/uthmani?chapter_number=';
     let mushafPage = 1;
-    let mushafOcclusion = false;
-    let mushafDrawing = false;
+    const mushafTexts = {}; // surah -> { ayahNum: text_uthmani }
+
+    function toArabicDigits(n) {
+        return String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+    }
+
+    async function getSurahText(s) {
+        if (mushafTexts[s]) return mushafTexts[s];
+        const cached = localStorage.getItem('qp_uthmani_' + s);
+        if (cached) {
+            try { mushafTexts[s] = JSON.parse(cached); return mushafTexts[s]; } catch (e) {}
+        }
+        try {
+            const res = await fetch(MUSHAF_TEXT_API + s);
+            const data = await res.json();
+            const map = {};
+            (data.verses || []).forEach(v => { map[parseInt(v.verse_key.split(':')[1])] = v.text_uthmani; });
+            mushafTexts[s] = map;
+            try { localStorage.setItem('qp_uthmani_' + s, JSON.stringify(map)); } catch (e) {}
+            return map;
+        } catch (e) {
+            return null;
+        }
+    }
 
     function pageInfo(p) {
         const first = allAyahs.find(a => a.page === p);
@@ -1092,26 +1140,62 @@
         return { first, last };
     }
 
-    function showMushafPage(p) {
+    async function showMushafPage(p) {
         p = Math.min(604, Math.max(1, p));
         mushafPage = p;
-        document.getElementById('mushaf-img').src = MUSHAF_BASE + p + '.jpg';
         const info = document.getElementById('mushaf-info');
         const { first, last } = pageInfo(p);
-        if (first && last) {
-            info.textContent = first.surahNum === last.surahNum
+        info.textContent = first && last
+            ? (first.surahNum === last.surahNum
                 ? `Page ${p} · ${first.surahName} ${first.ayahNum}–${last.ayahNum}`
-                : `Page ${p} · ${first.surahName} ${first.ayahNum} – ${last.surahName} ${last.ayahNum}`;
-        } else {
-            info.textContent = `Page ${p}`;
-        }
+                : `Page ${p} · ${first.surahName} ${first.ayahNum} – ${last.surahName} ${last.ayahNum}`)
+            : `Page ${p}`;
         document.getElementById('mushaf-prev').disabled = p <= 1;
         document.getElementById('mushaf-next').disabled = p >= 604;
-        mushafReset();
+
+        const pageEl = document.getElementById('mushaf-page');
+        pageEl.innerHTML = '<div class="mushaf-loading">Loading…</div>';
+
+        const verses = allAyahs.filter(a => a.page === p);
+        const surahs = [...new Set(verses.map(v => v.surahNum))];
+        await Promise.all(surahs.map(getSurahText));
+        if (mushafPage !== p) return; // navigated away while fetching
+
+        let html = '';
+        for (const v of verses) {
+            const text = (mushafTexts[v.surahNum] || {})[v.ayahNum] || '';
+            html += `<div class="mushaf-verse" onclick="toggleVerseCloze(this)">
+                <div class="mushaf-verse-text">${text} <span class="mushaf-verse-end">﴿${toArabicDigits(v.ayahNum)}﴾</span></div>
+                <div class="mushaf-cloze">${toArabicDigits(v.ayahNum)}</div>
+            </div>`;
+        }
+        pageEl.innerHTML = html || '<div class="mushaf-loading">No verses on this page.</div>';
     }
 
-    // The mushaf follows the selection (any mode) and playback
+    function toggleVerseCloze(el) {
+        el.classList.toggle('covered');
+    }
+
+    function mushafRevealAll() {
+        document.querySelectorAll('#mushaf-page .mushaf-verse').forEach(el => el.classList.remove('covered'));
+    }
+
+    function toggleMushaf() {
+        const panel = document.getElementById('mushaf-panel');
+        const btn = document.getElementById('mushaf-toggle-btn');
+        const show = !panel.classList.contains('visible');
+        panel.classList.toggle('visible', show);
+        btn.classList.toggle('active', show);
+        if (show) {
+            const a = allAyahs[selStartIdx];
+            showMushafPage(a ? a.page : mushafPage);
+            setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+        }
+    }
+
+    // The mushaf follows the selection (any mode) and playback while visible
     function syncMushafFromSelection() {
+        if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
         const a = allAyahs[selStartIdx];
         if (!a) return;
         if (a.page !== mushafPage) showMushafPage(a.page);
@@ -1120,74 +1204,6 @@
     function mushafGo(dir) {
         showMushafPage(mushafPage + dir);
     }
-
-    // --- Occlusion mode: hold & drag over verses to hide them ---
-    function toggleOcclusion(btn) {
-        mushafOcclusion = !mushafOcclusion;
-        btn.classList.toggle('active', mushafOcclusion);
-        document.getElementById('mushaf-wrap').classList.toggle('occluding', mushafOcclusion);
-        document.getElementById('mushaf-controls').style.display = mushafOcclusion ? 'flex' : 'none';
-        if (mushafOcclusion) setupMushafCanvas();
-    }
-
-    function setupMushafCanvas() {
-        const img = document.getElementById('mushaf-img');
-        const canvas = document.getElementById('mushaf-canvas');
-        if (!img.complete || !img.naturalWidth) {
-            img.onload = () => setupMushafCanvas();
-            return;
-        }
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-    }
-
-    function mushafCanvasPos(e) {
-        const canvas = document.getElementById('mushaf-canvas');
-        const rect = canvas.getBoundingClientRect();
-        return {
-            x: (e.clientX - rect.left) * (canvas.width / rect.width),
-            y: (e.clientY - rect.top) * (canvas.height / rect.height)
-        };
-    }
-
-    function mushafDraw(e) {
-        if (!mushafDrawing) return;
-        const canvas = document.getElementById('mushaf-canvas');
-        const ctx = canvas.getContext('2d');
-        const { x, y } = mushafCanvasPos(e);
-        ctx.strokeStyle = 'rgba(20, 20, 25, 0.88)';
-        ctx.lineWidth = Math.max(18, canvas.width / 14);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-    }
-
-    function mushafReset() {
-        const canvas = document.getElementById('mushaf-canvas');
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    document.getElementById('mushaf-canvas').addEventListener('pointerdown', (e) => {
-        if (!mushafOcclusion) return;
-        mushafDrawing = true;
-        e.preventDefault();
-        const canvas = document.getElementById('mushaf-canvas');
-        const ctx = canvas.getContext('2d');
-        const { x, y } = mushafCanvasPos(e);
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + 0.01, y + 0.01); // dot for a simple tap
-        ctx.stroke();
-    });
-    document.getElementById('mushaf-canvas').addEventListener('pointermove', (e) => {
-        if (!mushafOcclusion) return;
-        e.preventDefault();
-        mushafDraw(e);
-    });
-    document.addEventListener('pointerup', () => { mushafDrawing = false; });
 
     function selectAdjust(element, mode) {
         const parent = element.parentElement;
@@ -1582,8 +1598,8 @@
             document.getElementById('now-playing').innerHTML =
                 `<b>${v.surahName}</b> — Ayah ${v.ayahNum}<span class="np-sub">Juz ${v.juz} · Page ${v.page}</span>`;
         }
-        // mushaf follows the verse currently playing
-        if (v.page !== mushafPage) showMushafPage(v.page);
+        // mushaf follows the verse currently playing (while visible)
+        if (document.getElementById('mushaf-panel').classList.contains('visible') && v.page !== mushafPage) showMushafPage(v.page);
         syncMediaSession(v);
     }
 
