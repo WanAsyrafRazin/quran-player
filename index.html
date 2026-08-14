@@ -199,13 +199,15 @@
             font-family: 'Geeza Pro', 'KFGQPC Uthmanic Script HAFS', serif;
             font-size: .55em;
             font-weight: 700;
-            margin: 0 .55em;
+            /* right margin only (space before the emblem); the LEFT margin was
+               extending the verse box past the emblem into the next verse */
+            margin: 0 .55em 0 0;
             white-space: nowrap;
         }
         .mf-cover {
             position: absolute;
             top: 50%;
-            left: -2px;
+            left: 0;
             right: -2px;
             transform: translateY(-50%);
             height: 1.3em;
@@ -226,6 +228,16 @@
         .mf-verse.covered .mf-cover { display: flex; }
         .mf-verse.covered .mf-word { visibility: hidden; }
         .mf-verse.covered .mf-end { visibility: hidden; }
+        /* Classic coords-path pills: taller so the cover hides the whole text
+           block including the tashkeel (baris) above/below the letters. The
+           printed glyphs sit in the upper ~75% of each line band, so the pill
+           anchors at the band top instead of dead-centering. */
+        .mf-classic > .mf-verse .mf-cover {
+            top: 0;
+            transform: none;
+            height: 76%;
+            max-height: none;
+        }
         .mf-surah-header {
             display: block;
             clear: both;
@@ -1662,12 +1674,10 @@
         const flush = () => {
             if (frag) {
                 // inter-verse space lives OUTSIDE the verse span so the cloze
-                // cover ends at the emblem — never bleeds into the next verse
+                // cover ends at the emblem — never bleeds into the next verse.
+                // (no whitespace/newlines inside the span: they'd extend the box)
                 lineHtml += (first ? '' : ' ') +
-                    `<span class="mf-verse" data-vkey="${curVerse}" onclick="toggleVerseCloze(this)">
-                    ${frag}
-                    <span class="mf-cover">${toArabicDigits(curVerse.split(':')[1])}</span>
-                </span>`;
+                    `<span class="mf-verse" data-vkey="${curVerse}" onclick="toggleVerseCloze(this)">${frag}<span class="mf-cover">${toArabicDigits(curVerse.split(':')[1])}</span></span>`;
                 first = false;
                 frag = '';
             }
