@@ -362,13 +362,11 @@
         .mushaf-reset.toggle-on:hover { background: #27593F; }
         body.dark-mode .mushaf-pagelabel { color: #A0AEC0; }
         body.dark-mode .mushaf-page-input { background: #2A3A44; color: #EDF2F7; border-color: #4A5568; }
-        /* classic page: overlay page number at bottom center of the image */
+        /* classic page: page number caption BELOW the image */
         .mf-classic-pagenum {
-            position: absolute;
-            bottom: 8px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 5;
+            display: block;
+            text-align: center;
+            margin-top: 8px;
             font-family: 'Geeza Pro', 'KFGQPC Uthmanic Script HAFS', serif;
             font-size: 14px;
             font-weight: 700;
@@ -376,7 +374,10 @@
             background: rgba(243, 233, 210, 0.92);
             border: 1px solid #C9A96A;
             border-radius: 8px;
-            padding: 1px 10px;
+            padding: 1px 12px;
+            width: fit-content;
+            margin-left: auto;
+            margin-right: auto;
             pointer-events: none;
         }
         body.dark-mode .mf-classic-pagenum {
@@ -1779,8 +1780,8 @@
             <div class="mf-classic" style="aspect-ratio:${iw}/${ih};width:${maxW}px;" onclick="classicTap(event)">
                 <img class="mf-classic-img" src="${MUSHAF_PAGE_IMG}${p}.jpg" alt="Page ${p}">
                 ${textLayer}${coversHtml}
-                <span class="mf-classic-pagenum">${toArabicDigits(p)}</span>
-            </div>`;
+            </div>
+            <span class="mf-classic-pagenum">${toArabicDigits(p)}</span>`;
         updateToggleAllBtn();
     }
 
