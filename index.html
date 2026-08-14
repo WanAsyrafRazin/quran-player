@@ -750,6 +750,13 @@
     const VALID_RECITATIONS = ['murattal_timestamps.json', 'mujawwad_timestamps.json'];
     const savedRecitation = localStorage.getItem('quran_player_recitation');
     let recitationFile = VALID_RECITATIONS.includes(savedRecitation) ? savedRecitation : 'murattal_timestamps.json';
+
+    // Isti'ādha (أعوذ بالله من الشيطان الرجيم) — recited instead of the basmalah
+    // before At-Tawbah (surah 9). The mujawwad surah-9 file doesn't include it,
+    // so it is taken from the opening of the mujawwad Fatihah file, where 1:1
+    // (the basmalah) starts at 7.82s — everything before that is the isti'ādha.
+    const ISTIADHA_URL = 'https://server12.mp3quran.net/maher/Almusshaf-Al-Mojawwad/001.mp3';
+    const ISTIADHA_END = 7.82;
     
     // --- 2. Gapless A-B Engine Variables ---
     let isPlaying = false;
@@ -1301,21 +1308,34 @@
         }
 
         // Inject the basmalah at the start of every surah entered at its first ayah
-        // (except Al-Fatihah, where 1:1 IS the basmalah, and At-Tawbah, which has none).
-        // The basmalah occupies the audio from the file start (0s) up to ayah 1's start.
-        // Gapless/murattal files fold it into ayah 1 (segment length 0 -> skipped);
-        // mujawwad files have it as a separate leading segment -> now played properly.
+        // (except Al-Fatihah, where 1:1 IS the basmalah, and At-Tawbah, which has
+        // none — there we inject the isti'ādha instead). The segment occupies the
+        // audio from the file start (0s) up to ayah 1's start. Gapless/murattal
+        // files fold it into ayah 1 (segment length 0 -> skipped); mujawwad files
+        // have it as a separate leading segment -> now played properly.
         const withBasmalah = [];
         for (let i = 0; i < localPlaylist.length; i++) {
             const v = localPlaylist[i];
-            if (v.ayahNum === 1 && v.surahNum !== 1 && v.surahNum !== 9 && v.start_time > 0.5) {
-                withBasmalah.push({
-                    ...v,
-                    isBasmalah: true,
-                    ayahNum: null,
-                    start_time: 0,
-                    end_time: v.start_time
-                });
+            if (v.ayahNum === 1 && v.start_time > 0.5 && v.surahNum !== 1) {
+                if (v.surahNum === 9) {
+                    // At-Tawbah: isti'ādha, sourced from the mujawwad Fatihah opening
+                    withBasmalah.push({
+                        ...v,
+                        segType: 'istiaadha',
+                        ayahNum: null,
+                        audio_url: ISTIADHA_URL,
+                        start_time: 0,
+                        end_time: ISTIADHA_END
+                    });
+                } else {
+                    withBasmalah.push({
+                        ...v,
+                        segType: 'basmalah',
+                        ayahNum: null,
+                        start_time: 0,
+                        end_time: v.start_time
+                    });
+                }
             }
             withBasmalah.push(v);
         }
@@ -1325,9 +1345,12 @@
     function updateNowPlaying() {
         const v = playlist[currentAyahIndex];
         if (!v) return;
-        if (v.isBasmalah) {
+        if (v.segType === 'basmalah') {
             document.getElementById('now-playing').innerHTML =
                 `<b>Bismillah</b><span class="np-sub">Starting ${v.surahName} · Juz ${v.juz} · Page ${v.page}</span>`;
+        } else if (v.segType === 'istiaadha') {
+            document.getElementById('now-playing').innerHTML =
+                `<b>أعوذ بالله من الشيطان الرجيم</b><span class="np-sub">Starting ${v.surahName} · Juz ${v.juz} · Page ${v.page}</span>`;
         } else {
             document.getElementById('now-playing').innerHTML =
                 `<b>${v.surahName}</b> — Ayah ${v.ayahNum}<span class="np-sub">Juz ${v.juz} · Page ${v.page}</span>`;
@@ -1346,9 +1369,11 @@
     function syncMediaSession(v) {
         if (!('mediaSession' in navigator)) return;
         try {
-            const title = v.isBasmalah
+            const title = v.segType === 'basmalah'
                 ? `Bismillah — ${v.surahName}`
-                : `${v.surahNum}. ${v.surahName} — Ayah ${v.ayahNum}`;
+                : v.segType === 'istiaadha'
+                    ? `A'udhu Billah — ${v.surahName}`
+                    : `${v.surahNum}. ${v.surahName} — Ayah ${v.ayahNum}`;
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title,
                 artist: `Maher al Muaiqly · ${playbackSpeed.toFixed(2).replace(/0$/, '')}x · Juz ${v.juz} · Page ${v.page}`,
