@@ -144,12 +144,12 @@
             padding: 30px 0;
         }
         .mf-line {
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            display: block;
             min-height: 1.35em;
             direction: rtl;
+            text-align: justify;
         }
+        .mf-line .mf-verse { display: inline-flex; vertical-align: middle; }
         .mf-verse {
             position: relative;
             display: inline-flex;
@@ -884,6 +884,7 @@
             <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(-1)" aria-label="Previous page">◀</button>
             <div class="mushaf-float-title" id="mushaf-info">Loading…</div>
             <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(1)" aria-label="Next page">▶</button>
+            <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle tajweed colors" title="Toggle tajweed colors">🕌</button>
             <button class="mushaf-float-close" id="mushaf-close" onclick="toggleMushaf()" aria-label="Close Mushaf">✕</button>
         </div>
         <div class="mushaf-float-body" id="mushaf-page"></div>
@@ -1182,39 +1183,52 @@
     const MUSHAF_FONT_BASE = 'https://raw.githubusercontent.com/quran/quran.com-images/master/res/fonts/';
     const SURAH_NAMES_AR = {"1":"الفاتحة","2":"البقرة","3":"آل عمران","4":"النساء","5":"المائدة","6":"الأنعام","7":"الأعراف","8":"الأنفال","9":"التوبة","10":"يونس","11":"هود","12":"يوسف","13":"الرعد","14":"ابراهيم","15":"الحجر","16":"النحل","17":"الإسراء","18":"الكهف","19":"مريم","20":"طه","21":"الأنبياء","22":"الحج","23":"المؤمنون","24":"النور","25":"الفرقان","26":"الشعراء","27":"النمل","28":"القصص","29":"العنكبوت","30":"الروم","31":"لقمان","32":"السجدة","33":"الأحزاب","34":"سبإ","35":"فاطر","36":"يس","37":"الصافات","38":"ص","39":"الزمر","40":"غافر","41":"فصلت","42":"الشورى","43":"الزخرف","44":"الدخان","45":"الجاثية","46":"الأحقاف","47":"محمد","48":"الفتح","49":"الحجرات","50":"ق","51":"الذاريات","52":"الطور","53":"النجم","54":"القمر","55":"الرحمن","56":"الواقعة","57":"الحديد","58":"المجادلة","59":"الحشر","60":"الممتحنة","61":"الصف","62":"الجمعة","63":"المنافقون","64":"التغابن","65":"الطلاق","66":"التحريم","67":"الملك","68":"القلم","69":"الحاقة","70":"المعارج","71":"نوح","72":"الجن","73":"المزمل","74":"المدثر","75":"القيامة","76":"الانسان","77":"المرسلات","78":"النبإ","79":"النازعات","80":"عبس","81":"التكوير","82":"الإنفطار","83":"المطففين","84":"الإنشقاق","85":"البروج","86":"الطارق","87":"الأعلى","88":"الغاشية","89":"الفجر","90":"البلد","91":"الشمس","92":"الليل","93":"الضحى","94":"الشرح","95":"التين","96":"العلق","97":"القدر","98":"البينة","99":"الزلزلة","100":"العاديات","101":"القارعة","102":"التكاثر","103":"العصر","104":"الهمزة","105":"الفيل","106":"قريش","107":"الماعون","108":"الكوثر","109":"الكافرون","110":"النصر","111":"المسد","112":"الإخلاص","113":"الفلق","114":"الناس"};
     let mushafPage = 1;
-    const qcfFonts = {};      // page -> loaded font family name
+    let mushafTajweed = false; // 🕌 tajweed (QCF4 color font) vs plain (QCF)
+    try { mushafTajweed = localStorage.getItem('qp_mushaf_tajweed') === '1'; } catch (e) {}
+    const mushafFonts = {};   // page+style -> loaded font family name
     const pageWords = {};     // page -> {lines: {lineNum: [{text,type,surah,ayah}]}}
-    let bismillahFontReady = null;
 
     function toArabicDigits(n) {
         return String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
     }
 
-    async function loadQcfFont(page) {
-        const name = 'QCF_P' + String(page).padStart(3, '0');
-        if (qcfFonts[page]) return qcfFonts[page];
-        if (document.fonts.check(`16px "${name}"`)) { qcfFonts[page] = name; return name; }
+    async function loadMushafFont(page) {
+        const pad = String(page).padStart(3, '0');
+        const name = mushafTajweed ? 'QCF4_' + pad : 'QCF_P' + pad;
+        const key = page + (mushafTajweed ? '_t' : '_p');
+        if (mushafFonts[key]) return mushafFonts[key];
+        if (document.fonts.check(`16px "${name}"`)) { mushafFonts[key] = name; return name; }
         try {
-            const f = new FontFace(name, `url(${MUSHAF_FONT_BASE}${name}.TTF)`);
+            let source;
+            if (mushafTajweed) {
+                // QCF4 tajweed color fonts (COLR) — same positional layout, with tajweed colors
+                const resp = await fetch('https://cdn.jsdelivr.net/gh/alheekmahlib/quran_library@main/assets/fonts/quran_fonts_qfc4/QCF4' + pad + '_COLOR-Regular.ttf.gz');
+                const buf = await resp.arrayBuffer();
+                if (typeof DecompressionStream === 'undefined') throw new Error('gzip unsupported');
+                const ds = new DecompressionStream('gzip');
+                const stream = new Blob([buf]).stream().pipeThrough(ds);
+                source = await new Response(stream).arrayBuffer();
+            } else {
+                source = `url(${MUSHAF_FONT_BASE}${name}.TTF)`;
+            }
+            const f = new FontFace(name, source);
             await f.load();
             document.fonts.add(f);
-            qcfFonts[page] = name;
+            mushafFonts[key] = name;
             return name;
         } catch (e) {
-            qcfFonts[page] = null; // fall back to system Arabic font
+            mushafFonts[key] = null; // fall back to system Arabic font
             return null;
         }
     }
 
-    async function loadBismillahFont() {
-        if (bismillahFontReady) return bismillahFontReady;
-        try {
-            const f = new FontFace('QCF_BSML', `url(${MUSHAF_FONT_BASE}QCF_BSML.TTF)`);
-            await f.load();
-            document.fonts.add(f);
-            bismillahFontReady = 'QCF_BSML';
-        } catch (e) { bismillahFontReady = null; }
-        return bismillahFontReady;
+    // QCF4 COLR fonts carry theme palettes: 0 = light, 1 = dark. Pick per current theme.
+    function applyMushafPalette(fontName) {
+        if (!fontName || !mushafTajweed) return;
+        const dark = document.body.classList.contains('dark-mode');
+        let el = document.getElementById('mf-palette-style');
+        if (!el) { el = document.createElement('style'); el.id = 'mf-palette-style'; document.head.appendChild(el); }
+        el.textContent = `@font-palette-values --MF { font-family: '${fontName}'; base-palette: ${dark ? 1 : 0}; }`;
     }
 
     async function getPageWords(p) {
@@ -1277,64 +1291,90 @@
         const pageEl = document.getElementById('mushaf-page');
         pageEl.innerHTML = '<div class="mushaf-loading">Loading…</div>';
 
-        const [fontName, lines, _bsml] = await Promise.all([loadQcfFont(p), getPageWords(p), loadBismillahFont()]);
+        const [fontName, lines] = await Promise.all([loadMushafFont(p), getPageWords(p)]);
         if (mushafPage !== p || !document.getElementById('mushaf-panel').classList.contains('visible')) return;
         if (!lines) {
             pageEl.innerHTML = '<div class="mushaf-loading">Could not load page. Check connection.</div>';
             return;
         }
 
-        // Build the 15 mushaf lines. Missing line numbers = surah header / bismillah slots.
-        const lineNums = Object.keys(lines).map(Number).sort((a, b) => a - b);
         const fs = mushafFontSize();
-        let html = '';
+        const fontFamily = fontName ? `'${fontName}'` : null;
+        applyMushafPalette(fontName);
+
+        // Build the full 15-line page: line 1..15, with surah header + bismillah
+        // slots where the API's word line numbers have gaps (surah starts).
+        const lineNums = Object.keys(lines).map(Number).sort((a, b) => a - b);
+        const slots = {}; // lineNum -> 'header' | 'bismillah' | words[]
         let prevLine = 0;
         let lastSurah = null;
-
         for (const ln of lineNums) {
-            const gap = ln - prevLine - 1;
             const surahOfLine = lines[ln][0].surah;
             const startsNewSurah = surahOfLine !== lastSurah;
-
+            const gap = ln - prevLine - 1;
             if (gap > 0 && startsNewSurah) {
                 // gap of 2 → surah header + bismillah; gap of 1 → header only (surah 1 or 9)
-                if (gap >= 2) {
-                    html += surahHeaderHtml(surahOfLine);
-                    html += bismillahHtml(fs);
-                } else {
-                    html += surahHeaderHtml(surahOfLine);
-                }
+                slots[ln - gap] = 'header';
+                if (gap >= 2) slots[ln - 1] = 'bismillah';
             }
-
-            // render the line: group consecutive words into verse fragments
-            let lineHtml = `<div class="mf-line" style="font-size:${fs}px;${fontName ? `font-family:'${fontName}';` : ''}line-height:1.35;">`;
-            let curVerse = null;
-            let frag = '';
-            const flush = () => {
-                if (frag) {
-                    lineHtml += `<span class="mf-verse" data-vkey="${curVerse}" onclick="toggleVerseCloze(this)">
-                        ${frag}
-                        <span class="mf-cover">${toArabicDigits(curVerse.split(':')[1])}</span>
-                    </span>`;
-                    frag = '';
-                }
-            };
-            for (const w of lines[ln]) {
-                const vkey = w.surah + ':' + w.ayah;
-                if (vkey !== curVerse) { flush(); curVerse = vkey; }
-                frag += w.type === 'end'
-                    ? `<span class="mf-end">﴿${toArabicDigits(w.ayah)}﴾</span>`
-                    : `<span class="mf-word">${w.text}</span>`;
-            }
-            flush();
-            lineHtml += '</div>';
-            html += lineHtml;
-
+            slots[ln] = lines[ln];
             prevLine = ln;
             lastSurah = surahOfLine;
         }
 
+        let html = '';
+        for (let ln = 1; ln <= 15; ln++) {
+            const content = slots[ln];
+            if (content === 'header') {
+                html += surahHeaderHtml(lastSurahOfSlot(slots, ln, lineNums));
+            } else if (content === 'bismillah') {
+                html += bismillahHtml(fs, fontFamily);
+            } else if (content) {
+                html += mushafLineHtml(content, fs, fontFamily);
+            } else {
+                // empty slot on a normal 15-line page — render a blank justified line
+                html += `<div class="mf-line" style="font-size:${fs}px;${fontFamily ? `font-family:${fontFamily};` : ''}">&nbsp;</div>`;
+            }
+        }
+
         pageEl.innerHTML = html;
+    }
+
+    function lastSurahOfSlot(slots, ln, lineNums) {
+        // surah of the nearest word line at/after this slot (header sits before its surah's words)
+        for (let i = ln; i <= 15; i++) {
+            if (slots[i] && Array.isArray(slots[i])) return slots[i][0].surah;
+        }
+        for (let i = ln - 1; i >= 1; i--) {
+            if (slots[i] && Array.isArray(slots[i])) return slots[i][0].surah;
+        }
+        return 1;
+    }
+
+    function mushafLineHtml(words, fs, fontFamily) {
+        const pal = mushafTajweed ? 'font-palette:--MF;' : '';
+        let lineHtml = `<div class="mf-line" style="font-size:${fs}px;${fontFamily ? `font-family:${fontFamily};` : ''}${pal}">`;
+        let curVerse = null;
+        let frag = '';
+        const flush = () => {
+            if (frag) {
+                lineHtml += `<span class="mf-verse" data-vkey="${curVerse}" onclick="toggleVerseCloze(this)">
+                    ${frag}
+                    <span class="mf-cover">${toArabicDigits(curVerse.split(':')[1])}</span>
+                </span>`;
+                frag = '';
+            }
+        };
+        for (const w of words) {
+            const vkey = w.surah + ':' + w.ayah;
+            if (vkey !== curVerse) { flush(); curVerse = vkey; }
+            frag += w.type === 'end'
+                ? `<span class="mf-end">﴿${toArabicDigits(w.ayah)}﴾</span>`
+                : `<span class="mf-word">${w.text}</span>`;
+        }
+        flush();
+        lineHtml += '</div>';
+        return lineHtml;
     }
 
     function surahHeaderHtml(surah) {
@@ -1342,9 +1382,10 @@
         return `<div class="mf-surah-header"><span class="orn">۞</span><span class="name">سُورَةُ ${name}</span><span class="orn">۞</span></div>`;
     }
 
-    function bismillahHtml(fs) {
-        const fontStyle = bismillahFontReady ? `font-family:'${bismillahFontReady}';` : '';
-        return `<div class="mf-bismillah" style="font-size:${fs}px;${fontStyle}">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</div>`;
+    function bismillahHtml(fs, fontFamily) {
+        // Basmalah glyphs live in the page font itself (it's line 2 of the page),
+        // so render with the page font — NOT QCF_BSML (which shows boxes).
+        return `<div class="mf-bismillah" style="font-size:${fs}px;${fontFamily ? `font-family:${fontFamily};` : ''}">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</div>`;
     }
 
     function toggleVerseCloze(el) {
@@ -1366,10 +1407,17 @@
         panel.classList.toggle('visible', show);
         btn.classList.toggle('active', show);
         if (show) {
-            loadBismillahFont();
             const a = allAyahs[selStartIdx];
             showMushafPage(a ? a.page : mushafPage);
         }
+    }
+
+    function toggleMushafStyle() {
+        mushafTajweed = !mushafTajweed;
+        try { localStorage.setItem('qp_mushaf_tajweed', mushafTajweed ? '1' : '0'); } catch (e) {}
+        const btn = document.getElementById('mushaf-style-btn');
+        if (btn) { btn.textContent = mushafTajweed ? '⬛' : '🕌'; btn.title = mushafTajweed ? 'Switch to plain text' : 'Switch to tajweed colors'; }
+        showMushafPage(mushafPage);
     }
 
     // The mushaf follows the selection (any mode) and playback while visible
@@ -1383,6 +1431,16 @@
     function mushafGo(dir) {
         showMushafPage(mushafPage + dir);
     }
+
+    // Floating window: draggable via its header
+    (function initMushafUI() {
+        // restore tajweed button state
+        const styleBtn = document.getElementById('mushaf-style-btn');
+        if (styleBtn) {
+            styleBtn.textContent = mushafTajweed ? '⬛' : '🕌';
+            styleBtn.title = mushafTajweed ? 'Switch to plain text' : 'Switch to tajweed colors';
+        }
+    })();
 
     // Floating window: draggable via its header
     (function initMushafDrag() {

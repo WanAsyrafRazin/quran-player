@@ -3,7 +3,7 @@
 // because service-worker caches are wiped on every app update. Audio requests
 // pass straight through to the network — the page serves blob: URLs from
 // IndexedDB when files are saved, so this never blocks offline playback.
-const CACHE = 'quran-player-v15';
+const CACHE = 'quran-player-v16';
 const SHELL = [
   './',
   './index.html',
