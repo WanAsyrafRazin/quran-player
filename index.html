@@ -72,16 +72,12 @@
         .mushaf-float {
             position: fixed;
             z-index: 10000;
-            top: 70px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: min(94vw, 460px);
-            max-height: 82vh;
+            inset: 0;
+            width: 100%;
+            height: 100dvh;
             display: none;
             flex-direction: column;
             background: #FDFBF4;
-            border-radius: 16px;
-            box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.08);
             overflow: hidden;
         }
         .mushaf-float.visible { display: flex; }
@@ -92,12 +88,9 @@
             padding: 10px 12px;
             background: #3F5E68;
             color: #fff;
-            cursor: grab;
             user-select: none;
-            touch-action: none;
             flex-shrink: 0;
         }
-        .mushaf-float-header:active { cursor: grabbing; }
         .mushaf-float-title {
             flex: 1;
             font-size: 13px;
@@ -132,7 +125,7 @@
         }
         .mushaf-float-close:hover { background: #E53E3E; }
         .mushaf-float-body {
-            overflow-y: auto;
+            overflow: hidden;
             padding: 18px 16px 14px;
             background: #FDFBF4;
             flex: 1;
@@ -148,9 +141,13 @@
             min-height: 1.35em;
             direction: rtl;
             text-align: justify;
-            text-align-last: center;
-            line-height: 2.4;
+            text-align-last: justify;
+            line-height: 2.0;
             white-space: nowrap;
+        }
+        .mf-line.mf-line-end {
+            /* last line of a surah: naturally short, centered like the printed page */
+            text-align-last: center;
         }
         .mf-line .mf-verse { display: inline; }
         /* classic measurement layer keeps tight justify + inherited line height */
@@ -1406,10 +1403,16 @@
     }
 
     function mushafFontSize() {
-        // Match quran.com's generator ratio: ptsize = page width / 21.
+        // Match quran.com's generator ratio: ptsize = page width / 21, capped so
+        // the full 15-line page (header + bismillah + 15 lines at line-height 2.0)
+        // fits the panel height without scrolling.
         const panel = document.getElementById('mushaf-panel');
         const w = panel ? panel.getBoundingClientRect().width : 460;
-        return Math.max(20, Math.round(w / 21));
+        const body = document.getElementById('mushaf-page');
+        const h = body ? body.clientHeight : 700;
+        const byWidth = Math.max(20, Math.round(w / 21));
+        const byHeight = Math.max(14, Math.floor(h / 36)); // ~2.5em header + 2em bismillah + 30em lines + margins
+        return Math.min(byWidth, byHeight);
     }
 
     function pageInfo(p) {
@@ -1477,7 +1480,11 @@
             } else if (content === 'bismillah') {
                 html += bismillahHtml(fs, fontFamily);
             } else if (content) {
-                html += mushafLineHtml(content, fs, fontFamily);
+                // last line of a surah (its final ayah ends here) → short,
+                // centered like the printed page instead of force-justified
+                const lastW = content[content.length - 1];
+                const isSurahEnd = lastW && lastW.ayah === maxAyahOfSurah(lastW.surah);
+                html += mushafLineHtml(content, fs, fontFamily, false, isSurahEnd);
             } else {
                 // empty slot on a normal 15-line page — render a blank justified line
                 html += `<div class="mf-line" style="font-size:${fs}px;${fontFamily ? `font-family:${fontFamily};` : ''}">&nbsp;</div>`;
@@ -1498,9 +1505,14 @@
         if (mushafPage !== p || !document.getElementById('mushaf-panel').classList.contains('visible')) return;
         const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
 
-        // Panel width (used for the fallback's pixel scale; the coords path is % based)
+        // Panel body size: the fullscreen window should show the WHOLE page
+        // (image + all 15 lines) with no internal scrolling — fit both axes.
         const panel = document.getElementById('mushaf-panel');
-        const maxW = Math.min((panel ? panel.getBoundingClientRect().width : 460) - 24, iw);
+        const body = document.getElementById('mushaf-page');
+        const availW = (panel ? panel.getBoundingClientRect().width : 430) - 32;
+        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32);
+        const dispW = Math.min(availW, availH * iw / ih);
+        const maxW = Math.min(dispW, iw);
         const scale = maxW / iw;
 
         const coords = await getPageCoords(p);
@@ -1585,7 +1597,7 @@
         }
 
         pageEl.innerHTML = `
-            <div class="mf-classic" style="aspect-ratio:${iw}/${ih};" onclick="classicTap(event)">
+            <div class="mf-classic" style="aspect-ratio:${iw}/${ih};width:${maxW}px;" onclick="classicTap(event)">
                 <img class="mf-classic-img" src="${MUSHAF_PAGE_IMG}${p}.jpg" alt="Page ${p}">
                 ${textLayer}${coversHtml}
             </div>`;
@@ -1630,16 +1642,33 @@
         return 1;
     }
 
-    function mushafLineHtml(words, fs, fontFamily, isClassic) {
-        let lineHtml = `<div class="mf-line" style="font-size:${fs}px;${fontFamily ? `font-family:${fontFamily};` : ''}">`;
+    const _maxAyahCache = {};
+    function maxAyahOfSurah(surah) {
+        // total ayahs of a surah (from the ayah list), cached
+        if (_maxAyahCache[surah] !== undefined) return _maxAyahCache[surah];
+        let m = 0;
+        for (const a of allAyahs) {
+            if (a.surahNum === surah && a.ayahNum > m) m = a.ayahNum;
+        }
+        _maxAyahCache[surah] = m;
+        return m;
+    }
+
+    function mushafLineHtml(words, fs, fontFamily, isClassic, isSurahEnd) {
+        let lineHtml = `<div class="mf-line${isSurahEnd ? ' mf-line-end' : ''}" style="font-size:${fs}px;${fontFamily ? `font-family:${fontFamily};` : ''}">`;
         let curVerse = null;
         let frag = '';
+        let first = true; // first verse on the line (no leading inter-verse space)
         const flush = () => {
             if (frag) {
-                lineHtml += `<span class="mf-verse" data-vkey="${curVerse}" onclick="toggleVerseCloze(this)">
+                // inter-verse space lives OUTSIDE the verse span so the cloze
+                // cover ends at the emblem — never bleeds into the next verse
+                lineHtml += (first ? '' : ' ') +
+                    `<span class="mf-verse" data-vkey="${curVerse}" onclick="toggleVerseCloze(this)">
                     ${frag}
                     <span class="mf-cover">${toArabicDigits(curVerse.split(':')[1])}</span>
                 </span>`;
+                first = false;
                 frag = '';
             }
         };
@@ -1650,7 +1679,7 @@
             // full width (reproduces the printed kashida layout); the font's own
             // inter-word advances stay intact, justify adds the missing stretch.
             frag += w.type === 'end'
-                ? ` <span class="mf-end">﴿${toArabicDigits(w.ayah)}﴾</span> `
+                ? `<span class="mf-end">﴿${toArabicDigits(w.ayah)}﴾</span>`
                 : w.text + ' ';
         }
         flush();
@@ -1727,31 +1756,7 @@
         }
     })();
 
-    // Floating window: draggable via its header
-    (function initMushafDrag() {
-        const header = document.getElementById('mushaf-drag');
-        if (!header) return;
-        const panel = document.getElementById('mushaf-panel');
-        let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
-        header.addEventListener('pointerdown', e => {
-            if (e.target.closest('button')) return; // don't drag from buttons
-            dragging = true;
-            sx = e.clientX; sy = e.clientY;
-            const r = panel.getBoundingClientRect();
-            ox = r.left; oy = r.top;
-            header.setPointerCapture(e.pointerId);
-        });
-        header.addEventListener('pointermove', e => {
-            if (!dragging) return;
-            const nx = Math.min(window.innerWidth - 60, Math.max(8, ox + e.clientX - sx));
-            const ny = Math.min(window.innerHeight - 80, Math.max(8, oy + e.clientY - sy));
-            panel.style.left = nx + 'px';
-            panel.style.top = ny + 'px';
-            panel.style.transform = 'none';
-        });
-        header.addEventListener('pointerup', () => { dragging = false; });
-        header.addEventListener('pointercancel', () => { dragging = false; });
-    })();
+    // Fullscreen overlay: no dragging (the mushaf now replaces the whole screen)
 
     function selectAdjust(element, mode) {
         const parent = element.parentElement;
