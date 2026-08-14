@@ -1318,7 +1318,6 @@
         const name = 'QCF_P' + pad;
         const key = page + '_p';
         if (mushafFonts[key]) return mushafFonts[key];
-        if (document.fonts.check(`16px "${name}"`)) { mushafFonts[key] = name; return name; }
         try {
             const f = new FontFace(name, `url(${MUSHAF_FONT_BASE}${name}.TTF)`);
             await f.load();
@@ -1468,7 +1467,11 @@
         const w = panel ? panel.getBoundingClientRect().width : 460;
         const body = document.getElementById('mushaf-page');
         const h = body ? body.clientHeight : 700;
-        const byWidth = Math.max(20, Math.round(w / 21));
+        // width-derived: QCF positional fonts are designed so a line spans
+        // the full page at ptsize = pageWidth/21 (quran.com generator).
+        // NO 20px floor — a floor makes lines wider than the container and
+        // clips the last word of each line (RTL end).
+        const byWidth = Math.max(12, Math.round(w / 21));
         // frame (top corners + bottom page num ~3em) + header ~2.5em + bismillah ~2em + 15 lines (30em)
         const byHeight = Math.max(14, Math.floor(h / 38));
         return Math.min(byWidth, byHeight);
@@ -1508,7 +1511,7 @@
             return;
         }
 
-        const fs = mushafFontSize();
+        let fs = mushafFontSize();
         const fontFamily = fontName ? `'${fontName}'` : null;
 
         // Build the full 15-line page: line 1..15, with surah header + bismillah
@@ -1531,6 +1534,39 @@
             lastSurah = surahOfLine;
         }
 
+        let html = buildPlainHtml(slots, lineNums, fs, fontFamily);
+        let frameHtml = (fs2) => `
+            <div class="mf-frame" style="font-size:${fs2}px">
+                <div class="mf-frame-top">
+                    <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
+                    <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
+                </div>
+                <div class="mf-frame-mid">${html}</div>
+                <div class="mf-frame-bottom"><span class="mf-corner-box mf-pagenum">${toArabicDigits(p)}</span></div>
+            </div>`;
+        pageEl.innerHTML = frameHtml(fs);
+
+        // Fit-to-width safety net: justify stretches lines to the container, but
+        // if a line's NATURAL width still exceeds it (font metrics, subpixel), the
+        // last word (RTL end) would be clipped. Wait for the page font, then shrink
+        // the font until every line fits — first/last words pinned, never cut.
+        if (fontFamily) {
+            try { await document.fonts.ready; } catch (e) {}
+        }
+        let guard = 0;
+        while (guard++ < 4) {
+            const mid = pageEl.querySelector('.mf-frame-mid');
+            const cw = mid.clientWidth;
+            const over = [...mid.children].find(l => l.scrollWidth > cw + 0.5);
+            if (!over) break;
+            fs = Math.max(12, Math.floor(fs * cw / over.scrollWidth * 10) / 10);
+            html = buildPlainHtml(slots, lineNums, fs, fontFamily);
+            pageEl.innerHTML = frameHtml(fs);
+        }
+    }
+
+    // Build the 15-line plain page HTML (slots → header / bismillah / words).
+    function buildPlainHtml(slots, lineNums, fs, fontFamily) {
         let html = '';
         for (let ln = 1; ln <= 15; ln++) {
             const content = slots[ln];
@@ -1549,16 +1585,7 @@
                 html += `<div class="mf-line" style="font-size:${fs}px;${fontFamily ? `font-family:${fontFamily};` : ''}">&nbsp;</div>`;
             }
         }
-
-        pageEl.innerHTML = `
-            <div class="mf-frame" style="font-size:${fs}px">
-                <div class="mf-frame-top">
-                    <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
-                    <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
-                </div>
-                <div class="mf-frame-mid">${html}</div>
-                <div class="mf-frame-bottom"><span class="mf-corner-box mf-pagenum">${toArabicDigits(p)}</span></div>
-            </div>`;
+        return html;
     }
 
     // Classic mode: show the actual Dar al-Marefa tajweed page image, with an
