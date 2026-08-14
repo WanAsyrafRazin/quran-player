@@ -1349,18 +1349,51 @@
         } catch (e) {}
     }
 
-    // Seek within the current verse only (keeps the gapless engine in sync)
-    function seekBy(delta) {
-        const v = playlist[currentAyahIndex];
-        if (!v) return;
-        const t = Math.min(v.end_time - 0.05, Math.max(v.start_time, audioPlayer.currentTime + delta));
-        audioPlayer.currentTime = t;
+    // Seek anywhere inside the current selection (from-verse -> to-verse).
+    // If the target lands in another surah, swap the audio file seamlessly.
+    function seekToAbsolute(target) {
+        if (playlist.length === 0) return;
+        const selStart = playlist[0].start_time;
+        const selEnd = playlist[playlist.length - 1].end_time;
+        target = Math.min(selEnd - 0.05, Math.max(selStart, target));
+        let idx = playlist.findIndex(v => target < v.end_time);
+        if (idx < 0) idx = playlist.length - 1;
+        currentAyahIndex = idx;
+        currentAyahRepeatCount = 1;
+        if (audioPlayer.src !== playlist[idx].audio_url) {
+            audioPlayer.src = playlist[idx].audio_url;
+            audioPlayer.load();
+        }
+        audioPlayer.currentTime = target;
+        updateNowPlaying();
+        if (isPlaying) {
+            audioPlayer.play();
+            audioPlayer.ontimeupdate = handleTimeUpdate;
+        }
     }
 
+    // Notification seek buttons: ±10s within the selection
+    function seekBy(delta) {
+        seekToAbsolute(audioPlayer.currentTime + delta);
+    }
+
+    // Notification/drag seek: t is a position within the selection bar (0..duration)
     function seekTo(t) {
-        const v = playlist[currentAyahIndex];
-        if (!v) return;
-        audioPlayer.currentTime = Math.min(v.end_time - 0.05, Math.max(v.start_time, t));
+        if (playlist.length === 0) return;
+        seekToAbsolute(playlist[0].start_time + t);
+    }
+
+    // Notification progress bar spans the whole selection, not the full surah file
+    function syncMediaPosition() {
+        if (!('mediaSession' in navigator) || playlist.length === 0) return;
+        try {
+            const selStart = playlist[0].start_time;
+            navigator.mediaSession.setPositionState({
+                duration: playlist[playlist.length - 1].end_time - selStart,
+                playbackRate: playbackSpeed,
+                position: Math.max(0, audioPlayer.currentTime - selStart)
+            });
+        } catch (e) {}
     }
 
     // Skip to the previous/next verse in the current playlist
@@ -1394,6 +1427,7 @@
         audioPlayer.play();
 
         audioPlayer.ontimeupdate = handleTimeUpdate;
+        syncMediaPosition();
     }
 
     function handleTimeUpdate() {
@@ -1404,15 +1438,8 @@
         if (audioPlayer.currentTime >= currentVerse.end_time - 0.05) {
             audioPlayer.ontimeupdate = null; 
             handleVerseEnd();
-        } else if ('mediaSession' in navigator) {
-            // keep the notification progress bar showing the current verse
-            try {
-                navigator.mediaSession.setPositionState({
-                    duration: currentVerse.end_time - currentVerse.start_time,
-                    playbackRate: playbackSpeed,
-                    position: Math.max(0, audioPlayer.currentTime - currentVerse.start_time)
-                });
-            } catch (e) {}
+        } else {
+            syncMediaPosition();
         }
     }
 
