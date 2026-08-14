@@ -385,6 +385,30 @@
             background: rgba(26, 35, 46, 0.85);
             border-color: #4A5568;
         }
+        /* Reveal-next: floating button at the page's bottom-right corner,
+           works in both plain and classic modes */
+        .mushaf-reveal-next {
+            position: absolute;
+            right: 14px;
+            bottom: 14px;
+            z-index: 20;
+            border: none;
+            background: linear-gradient(140deg, #2E4A7A, #1B2F52);
+            color: #FFFFFF;
+            border-radius: 20px;
+            padding: 9px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 3px 12px rgba(0,0,0,.35);
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .mushaf-reveal-next:hover { background: linear-gradient(140deg, #3A5A8F, #24406B); }
+        .mushaf-reveal-next:active { transform: scale(0.96); }
+        body.dark-mode .mushaf-reveal-next {
+            background: linear-gradient(140deg, #5A6E96, #2E3F5E);
+        }
         .mushaf-hint {
             font-size: 12px;
             color: #8E919D;
@@ -1072,6 +1096,7 @@
             <span class="mushaf-hint">👆 Tap a verse to cover / reveal</span>
         </div>
         <div class="mushaf-float-body" id="mushaf-page"></div>
+        <button class="mushaf-reveal-next" id="mushaf-reveal-btn" title="Reveal one verse at a time from the top">⏷ Reveal next</button>
     </div>
 
     <div class="section-header">OFFLINE MODE</div>
@@ -1925,6 +1950,32 @@
         else { inp.value = mushafPage; }
     }
 
+    // Reveal cloze one verse at a time, top → bottom (reading order).
+    // If everything is already revealed, re-cloze the whole page first so
+    // the button acts as a study loop: tap → cover all, tap → reveal 1st,
+    // tap → reveal 2nd, ... until all shown, then tap → cover all again.
+    function mushafRevealNext() {
+        const page = document.getElementById('mushaf-page');
+        if (!page) return;
+        const keys = [];
+        page.querySelectorAll('.mf-verse').forEach(el => {
+            const k = el.dataset.vkey;
+            if (k && !keys.includes(k)) keys.push(k);
+        });
+        if (!keys.length) return;
+        const firstCovered = keys.find(k =>
+            page.querySelector(`.mf-verse[data-vkey="${k}"]`).classList.contains('covered'));
+        if (!firstCovered) {
+            // study loop restarts: cover everything
+            keys.forEach(k => {
+                page.querySelectorAll(`.mf-verse[data-vkey="${k}"]`).forEach(v => v.classList.add('covered'));
+            });
+        } else {
+            page.querySelectorAll(`.mf-verse[data-vkey="${firstCovered}"]`).forEach(v => v.classList.remove('covered'));
+        }
+        updateToggleAllBtn();
+    }
+
     function toggleMushaf() {
         const panel = document.getElementById('mushaf-panel');
         const btn = document.getElementById('mushaf-toggle-btn');
@@ -1983,6 +2034,9 @@
             const goBtn = document.getElementById('mushaf-go-btn');
             if (goBtn) goBtn.addEventListener('click', go);
         }
+        // reveal-next button
+        const rvBtn = document.getElementById('mushaf-reveal-btn');
+        if (rvBtn) rvBtn.addEventListener('click', mushafRevealNext);
     })();
 
     // Fullscreen overlay: no dragging (the mushaf now replaces the whole screen)
