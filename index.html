@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Maher al Muaiqly Player</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="favicon-32-v2.png">
@@ -13,6 +13,10 @@
     <meta name="theme-color" content="#1F3A44">
     <style>
         /* General Styles */
+        html, body {
+            touch-action: manipulation; /* kill double-tap zoom app-wide */
+            -webkit-tap-highlight-color: transparent;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             background-color: #F6F7FA;
@@ -362,22 +366,30 @@
         .mushaf-reset.toggle-on:hover { background: #27593F; }
         body.dark-mode .mushaf-pagelabel { color: #A0AEC0; }
         body.dark-mode .mushaf-page-input { background: #2A3A44; color: #EDF2F7; border-color: #4A5568; }
-        /* classic page: page number caption BELOW the image */
+        /* classic page: footer row below the image — page number stays
+           dead-center, reveal-next button sits beside it (right side) */
+        .mf-foot {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            min-height: 50px;
+            margin-top: 10px;
+            flex-shrink: 0;
+        }
         .mf-classic-pagenum {
-            display: block;
-            text-align: center;
-            margin-top: 8px;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
             font-family: 'Geeza Pro', 'KFGQPC Uthmanic Script HAFS', serif;
-            font-size: 14px;
+            font-size: 15px;
             font-weight: 700;
             color: #A9803B;
             background: rgba(243, 233, 210, 0.92);
             border: 1px solid #C9A96A;
             border-radius: 8px;
-            padding: 1px 12px;
-            width: fit-content;
-            margin-left: auto;
-            margin-right: auto;
+            padding: 3px 14px;
             pointer-events: none;
         }
         body.dark-mode .mf-classic-pagenum {
@@ -385,24 +397,21 @@
             background: rgba(26, 35, 46, 0.85);
             border-color: #4A5568;
         }
-        /* Reveal-next: floating button at the page's bottom-right corner,
+        /* Reveal-next: larger button, beside the page number below the image,
            works in both plain and classic modes */
         .mushaf-reveal-next {
-            position: absolute;
-            right: 14px;
-            bottom: 14px;
-            z-index: 20;
             border: none;
             background: linear-gradient(140deg, #2E4A7A, #1B2F52);
             color: #FFFFFF;
-            border-radius: 20px;
-            padding: 9px 16px;
-            font-size: 13px;
+            border-radius: 24px;
+            padding: 13px 30px;
+            font-size: 16px;
             font-weight: 700;
             cursor: pointer;
             box-shadow: 0 3px 12px rgba(0,0,0,.35);
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
+            flex-shrink: 0;
         }
         .mushaf-reveal-next:hover { background: linear-gradient(140deg, #3A5A8F, #24406B); }
         .mushaf-reveal-next:active { transform: scale(0.96); }
@@ -1096,7 +1105,6 @@
             <span class="mushaf-hint">👆 Tap a verse to cover / reveal</span>
         </div>
         <div class="mushaf-float-body" id="mushaf-page"></div>
-        <button class="mushaf-reveal-next" id="mushaf-reveal-btn" title="Reveal one verse at a time from the top">⏷ Reveal next</button>
     </div>
 
     <div class="section-header">OFFLINE MODE</div>
@@ -1636,6 +1644,9 @@
                 </div>
                 <div class="mf-frame-mid">${html}</div>
                 <div class="mf-frame-bottom"><span class="mf-corner-box mf-pagenum">${toArabicDigits(p)}</span></div>
+            </div>
+            <div class="mf-foot">
+                <button type="button" class="mushaf-reveal-next" title="Reveal one verse at a time from the top">⏷ Reveal next</button>
             </div>`;
         pageEl.innerHTML = frameHtml(fs);
 
@@ -1806,7 +1817,10 @@
                 <img class="mf-classic-img" src="${MUSHAF_PAGE_IMG}${p}.jpg" alt="Page ${p}">
                 ${textLayer}${coversHtml}
             </div>
-            <span class="mf-classic-pagenum">${toArabicDigits(p)}</span>`;
+            <div class="mf-foot">
+                <span class="mf-classic-pagenum">${toArabicDigits(p)}</span>
+                <button type="button" class="mushaf-reveal-next" title="Reveal one verse at a time from the top">⏷ Reveal next</button>
+            </div>`;
         updateToggleAllBtn();
     }
 
@@ -2034,9 +2048,14 @@
             const goBtn = document.getElementById('mushaf-go-btn');
             if (goBtn) goBtn.addEventListener('click', go);
         }
-        // reveal-next button
-        const rvBtn = document.getElementById('mushaf-reveal-btn');
-        if (rvBtn) rvBtn.addEventListener('click', mushafRevealNext);
+        // reveal-next button (rendered dynamically in both plain & classic)
+        // → delegate: one listener on the page container catches all clicks
+        const pageEl = document.getElementById('mushaf-page');
+        if (pageEl) {
+            pageEl.addEventListener('click', e => {
+                if (e.target.closest('.mushaf-reveal-next')) mushafRevealNext();
+            });
+        }
     })();
 
     // Fullscreen overlay: no dragging (the mushaf now replaces the whole screen)
