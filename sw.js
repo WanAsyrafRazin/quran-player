@@ -3,7 +3,7 @@
 // because service-worker caches are wiped on every app update. Audio requests
 // pass straight through to the network — the page serves blob: URLs from
 // IndexedDB when files are saved, so this never blocks offline playback.
-const CACHE = 'quran-player-v36';
+const CACHE = 'quran-player-v40';
 // All per-ayah page coordinates are precached so classic-mode cloze works offline.
 const COORDS = Array.from({ length: 604 }, (_, i) => './page-coords/' + (i + 1) + '.json');
 const SHELL = [
@@ -17,6 +17,9 @@ const SHELL = [
   './icon-512-v2.png'
 ];
 const AUDIO_RE = /mirrors\.quranicaudio\.com|server12\.mp3quran\.net|download\.quranicaudio\.com/;
+// Mushaf page scans: served CACHE-FIRST so classic pages load instantly once
+// the user saves them (the OFFLINE MODE button fills the 'quran-pages' cache).
+const PAGE_IMG_RE = /raw\.githubusercontent\.com\/QuranHub\/quran-pages-images/;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -41,6 +44,19 @@ self.addEventListener('fetch', (e) => {
   // Audio: pass through untouched (permanent storage lives in IndexedDB, page-side)
   if (AUDIO_RE.test(req.url)) {
     e.respondWith(fetch(req));
+    return;
+  }
+
+  // Mushaf page scans: cache-first once saved (instant classic-mode loads),
+  // network fallback + fill cache when not saved yet.
+  if (PAGE_IMG_RE.test(req.url)) {
+    e.respondWith(
+      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open('quran-pages').then((c) => c.put(req, copy));
+        return res;
+      }))
+    );
     return;
   }
 

@@ -1160,6 +1160,7 @@
         <div class="offline-buttons">
             <button id="dl-murattal" class="dl-btn" onclick="downloadRecitation('murattal_timestamps.json')">⬇ Download Murattal (fast) — 628 MB</button>
             <button id="dl-mujawwad" class="dl-btn" onclick="downloadRecitation('mujawwad_timestamps.json')">⬇ Download Mujawwad — 1.3 GB</button>
+            <button id="dl-mushaf" class="dl-btn" onclick="downloadMushafPages()">⬇ Save Mushaf pages (Plain + Classic) — 604 pages</button>
         </div>
         <div id="dl-progress" class="dl-progress" style="display:none;"></div>
         <div class="offline-hint">💡 <b>Install:</b> iPhone/iPad Safari → Share → <b>Add to Home Screen</b>. Then open the app icon (full-screen, like a native app). Audio is <b>saved permanently on your device</b> whenever you play a surah — or grab everything with the buttons above. Files survive app updates. Keep the app open while downloading. Works in airplane mode once saved.</div>
@@ -2955,6 +2956,61 @@
         } catch (e) {}
     }
 
+    // --- Mushaf pages (plain + classic) offline save ---
+    // Classic: page scans go into the 'quran-pages' cache (the SW serves them
+    // cache-first → instant). Plain: word data goes into localStorage
+    // (qp_pagewords_N) via the app's own loader. Both make page loads instant.
+    let downloadingMushaf = false;
+    const MUSHAF_PAGES_CACHE = 'quran-pages';
+
+    function mushafPageImgUrl(p) { return MUSHAF_PAGE_IMG + p + '.jpg'; }
+
+    async function mushafPageSaved(p) {
+        try {
+            const c = await caches.open(MUSHAF_PAGES_CACHE);
+            const img = await c.match(mushafPageImgUrl(p));
+            const words = localStorage.getItem('qp_pagewords_' + p);
+            return !!(img && words);
+        } catch (e) { return false; }
+    }
+
+    async function downloadMushafPages() {
+        if (downloadingMushaf) return;
+        if (!('caches' in window)) { alert('This browser cannot save pages. Use Safari/Chrome on mobile.'); return; }
+        const progressEl = document.getElementById('dl-progress');
+        downloadingMushaf = true;
+        document.getElementById('dl-mushaf').disabled = true;
+        document.getElementById('dl-murattal').disabled = true;
+        document.getElementById('dl-mujawwad').disabled = true;
+        progressEl.style.display = 'block';
+        let done = parseInt(localStorage.getItem('qp_pages_saved') || '0', 10);
+        progressEl.textContent = `Preparing… ${done}/604 already saved`;
+        try {
+            for (let p = 1; p <= 604; p++) {
+                if (p <= done) continue; // contiguous resume
+                if (await mushafPageSaved(p)) { done++; localStorage.setItem('qp_pages_saved', done); continue; }
+                // classic page scan
+                const cache = await caches.open(MUSHAF_PAGES_CACHE);
+                if (!(await cache.match(mushafPageImgUrl(p)))) {
+                    const r = await fetch(mushafPageImgUrl(p));
+                    if (!r.ok) throw new Error('image HTTP ' + r.status);
+                    await cache.put(mushafPageImgUrl(p), r);
+                }
+                // plain word data (the app's own loader stores it in localStorage)
+                await getPageWords(p);
+                done++;
+                localStorage.setItem('qp_pages_saved', done);
+                progressEl.textContent = `Saving mushaf pages… ${done}/604 (${Math.round(done / 604 * 100)}%) — page ${p}`;
+                if (p % 5 === 0) await new Promise(r => setTimeout(r, 0)); // let the UI paint
+            }
+            progressEl.textContent = '✅ All 604 mushaf pages saved — plain & classic load instantly (even offline).';
+        } catch (e) {
+            progressEl.textContent = `⚠ Failed at page ${done + 1} (${e.message}). Press again to resume — saved pages are kept.`;
+        }
+        downloadingMushaf = false;
+        updateOfflineStatus();
+    }
+
     async function updateOfflineStatus() {
         const el = document.getElementById('offline-status');
         if (!('indexedDB' in window)) {
@@ -2977,10 +3033,20 @@
 
         const bm = document.getElementById('dl-murattal');
         const bj = document.getElementById('dl-mujawwad');
-        bm.disabled = murDone || downloading;
-        bj.disabled = mujDone || downloading;
+        bm.disabled = murDone || downloading || downloadingMushaf;
+        bj.disabled = mujDone || downloading || downloadingMushaf;
         bm.innerHTML = murDone ? '✅ Murattal (fast) — saved (114/114)' : '⬇ Download Murattal (fast) — 628 MB';
         bj.innerHTML = mujDone ? '✅ Mujawwad — saved (114/114)' : '⬇ Download Mujawwad — 1.3 GB';
+
+        const bmh = document.getElementById('dl-mushaf');
+        if (bmh) {
+            const mSaved = parseInt(localStorage.getItem('qp_pages_saved') || '0', 10);
+            const allMushaf = mSaved >= 604;
+            bmh.disabled = allMushaf || downloadingMushaf;
+            bmh.innerHTML = allMushaf
+                ? '✅ Mushaf pages saved (604/604) — instant loads'
+                : (mSaved > 0 ? `⬇ Save Mushaf pages (Plain + Classic) — ${mSaved}/604 saved` : '⬇ Save Mushaf pages (Plain + Classic) — 604 pages');
+        }
     }
 
     async function downloadRecitation(recFile) {
