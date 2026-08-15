@@ -1136,8 +1136,9 @@
     <!-- Floating Mushaf window (QCF text-rendered, per-ayah cloze at exact positions) -->
     <div class="mushaf-float" id="mushaf-panel">
         <div class="mushaf-float-header" id="mushaf-drag">
-            <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(1)" aria-label="Next page" title="Next page">◀</button>
             <div class="mushaf-float-title" id="mushaf-info">Loading…</div>
+            <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(1)" aria-label="Next page" title="Next page">◀</button>
+            <button class="mushaf-nav" id="mushaf-play" onclick="mushafTogglePlay()" aria-label="Play or pause" title="Play / pause">▶</button>
             <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(-1)" aria-label="Previous page" title="Previous page">▶</button>
             <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle page style" title="Plain text — tap to switch">⬛</button>
             <button class="mushaf-nav" id="mushaf-theme-btn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Night mode">🌙</button>
@@ -1830,11 +1831,28 @@
     // Classic mode: show the actual Dar al-Marefa tajweed page image, with an
     // INVISIBLE QCF text layer calibrated (via image grid detection) to measure
     // each verse's exact position — cloze covers land precisely on the page.
+    // The most recently created blob: URL for a saved page image — revoked
+    // when the next page replaces it (keeps no orphaned object URLs).
+    let lastClassicBlobUrl = null;
+
     async function showClassicPage(pageEl, p, lines, fontName) {
         const { first } = pageInfo(p);
+        // Saved pages (OFFLINE MODE button) live permanently in IndexedDB —
+        // load the blob directly: instant AND offline, survives app updates.
+        const imgUrl = MUSHAF_PAGE_IMG + p + '.jpg';
+        let savedBlob = null;
+        try { savedBlob = await idbGet(imgUrl); } catch (e) {}
+        // The displayed <img> uses the blob URL when the page is saved
+        // (instant, offline, survives updates) — else the network URL.
+        let displaySrc = imgUrl;
+        if (savedBlob) {
+            if (lastClassicBlobUrl) URL.revokeObjectURL(lastClassicBlobUrl);
+            lastClassicBlobUrl = URL.createObjectURL(savedBlob);
+            displaySrc = lastClassicBlobUrl;
+        }
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        img.src = MUSHAF_PAGE_IMG + p + '.jpg';
+        img.src = displaySrc;
         await new Promise(res => { img.onload = res; img.onerror = res; });
         if (mushafPage !== p || !document.getElementById('mushaf-panel').classList.contains('visible')) return;
         const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
@@ -1948,7 +1966,7 @@
 
         pageEl.innerHTML = `
             <div class="mf-classic" style="aspect-ratio:${iw}/${ih};width:${maxW}px;" onclick="classicTap(event)">
-                <img class="mf-classic-img" src="${MUSHAF_PAGE_IMG}${p}.jpg" alt="Page ${p}">
+                <img class="mf-classic-img" src="${displaySrc}" alt="Page ${p}">
                 <div class="mf-classic-corners">
                     <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
                     <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
@@ -2152,6 +2170,17 @@
         showMushafPage(mushafPage);
     }
 
+    // Play/pause from inside the mushaf header — mirrors the main player.
+    function mushafTogglePlay() {
+        togglePlay();
+        mushafSyncPlayBtn();
+    }
+
+    function mushafSyncPlayBtn() {
+        const mb = document.getElementById('mushaf-play');
+        if (mb) mb.textContent = isPlaying ? '⏸' : '▶';
+    }
+
     // The mushaf follows the selection (any mode) and playback while visible
     function syncMushafFromSelection() {
         if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
@@ -2172,6 +2201,7 @@
             styleBtn.textContent = mushafMode === 'classic' ? '🖼' : '⬛';
             styleBtn.title = mushafMode === 'classic' ? 'Classic pages — tap to switch' : 'Plain text — tap to switch';
         }
+        mushafSyncPlayBtn();
         // page-number input: Enter/Go/change all jump to the page
         const pin = document.getElementById('mushaf-page-input');
         if (pin) {
@@ -2496,6 +2526,7 @@
             audioPlayer.ontimeupdate = null;
             playBtn.innerHTML = '▶ Play';
             playBtn.classList.remove('playing');
+            mushafSyncPlayBtn();
             setMediaState('paused');
             return;
         }
@@ -2508,6 +2539,7 @@
             audioPlayer.ontimeupdate = handleTimeUpdate;
             playBtn.innerHTML = '⏸ Pause';
             playBtn.classList.add('playing');
+            mushafSyncPlayBtn();
             setMediaState('playing');
             return;
         }
@@ -2554,6 +2586,7 @@
         isPlaying = true;
         isPaused = false;
         playBtn.innerHTML = '⏸ Pause';
+        mushafSyncPlayBtn();
         playBtn.classList.add('playing');
         document.getElementById('stop-btn').disabled = false;
 
@@ -2569,6 +2602,7 @@
         currentAyahIndex = 0;
         playlist = [];
         document.getElementById('play-btn').innerHTML = '▶ Play';
+        mushafSyncPlayBtn();
         document.getElementById('play-btn').classList.remove('playing');
         document.getElementById('stop-btn').disabled = true;
         document.getElementById('now-playing').innerHTML = 'Not playing';
@@ -2961,16 +2995,14 @@
     // cache-first → instant). Plain: word data goes into localStorage
     // (qp_pagewords_N) via the app's own loader. Both make page loads instant.
     let downloadingMushaf = false;
-    const MUSHAF_PAGES_CACHE = 'quran-pages';
 
     function mushafPageImgUrl(p) { return MUSHAF_PAGE_IMG + p + '.jpg'; }
 
     async function mushafPageSaved(p) {
         try {
-            const c = await caches.open(MUSHAF_PAGES_CACHE);
-            const img = await c.match(mushafPageImgUrl(p));
+            const blob = await idbGet(mushafPageImgUrl(p));
             const words = localStorage.getItem('qp_pagewords_' + p);
-            return !!(img && words);
+            return !!(blob && words);
         } catch (e) { return false; }
     }
 
@@ -2989,12 +3021,13 @@
             for (let p = 1; p <= 604; p++) {
                 if (p <= done) continue; // contiguous resume
                 if (await mushafPageSaved(p)) { done++; localStorage.setItem('qp_pages_saved', done); continue; }
-                // classic page scan
-                const cache = await caches.open(MUSHAF_PAGES_CACHE);
-                if (!(await cache.match(mushafPageImgUrl(p)))) {
-                    const r = await fetch(mushafPageImgUrl(p));
+                // classic page scan → PERMANENT IndexedDB storage (survives
+                // app updates and cache wipes, exactly like the audio files)
+                const url = mushafPageImgUrl(p);
+                if (!(await idbGet(url))) {
+                    const r = await fetch(url);
                     if (!r.ok) throw new Error('image HTTP ' + r.status);
-                    await cache.put(mushafPageImgUrl(p), r);
+                    await idbSet(url, await r.blob());
                 }
                 // plain word data (the app's own loader stores it in localStorage)
                 await getPageWords(p);
