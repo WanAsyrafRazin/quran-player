@@ -156,7 +156,7 @@
         .mf-line .mf-verse { display: inline; }
         /* Plain-text page frame: printed-mushaf corners — juz top-left,
            surah name top-right, page number bottom-center. */
-        .mf-frame { display: flex; flex-direction: column; height: 100%; }
+        .mf-frame { display: flex; flex-direction: column; height: auto; margin: 0 auto; }
         .mf-frame-top {
             display: flex;
             justify-content: space-between;
@@ -283,26 +283,26 @@
             display: block;
             clear: both;
             text-align: center;
-            margin: 20px auto;
-            padding: 7px 10px;
+            margin: 0.9em auto;
+            padding: 0.35em 0.6em;
             background: linear-gradient(180deg, #F3E9D2, #EAD9B4);
             border: 1.5px solid #C9A96A;
             border-radius: 12px;
             direction: rtl;
         }
-        .mf-surah-header .orn { color: #A9803B; font-size: 15px; display: inline-block; }
+        .mf-surah-header .orn { color: #A9803B; font-size: 0.9em; display: inline-block; }
         .mf-surah-header .name {
-            font-size: 17px;
+            font-size: 1.1em;
             font-weight: 700;
             color: #5C4013;
             font-family: 'Geeza Pro', 'KFGQPC Uthmanic Script HAFS', serif;
             display: inline-block;
-            padding: 0 8px;
+            padding: 0 0.45em;
         }
         .mf-bismillah {
             text-align: center;
             direction: rtl;
-            margin: 2px 0 6px;
+            margin: 0.1em 0 0.35em;
             color: #1A1A1A;
             line-height: 1.6;
         }
@@ -1558,21 +1558,22 @@
         }
     }
 
-    function mushafFontSize() {
+    function mushafFontSize(w, h) {
         // Match quran.com's generator ratio: ptsize = page width / 21, capped so
         // the full 15-line page (header + bismillah + 15 lines at line-height 2.0)
-        // fits the panel height without scrolling.
+        // fits the panel height without scrolling. w/h override the panel dims
+        // (plain mode sizes its font from the classic-style box it now fits).
         const panel = document.getElementById('mushaf-panel');
-        const w = panel ? panel.getBoundingClientRect().width : 460;
         const body = document.getElementById('mushaf-page');
-        const h = body ? body.clientHeight : 700;
+        const bw = w || (panel ? panel.getBoundingClientRect().width : 460);
+        const bh = h || (body ? body.clientHeight : 700);
         // width-derived: QCF positional fonts are designed so a line spans
         // the full page at ptsize = pageWidth/21 (quran.com generator).
         // NO 20px floor — a floor makes lines wider than the container and
         // clips the last word of each line (RTL end).
-        const byWidth = Math.max(12, Math.round(w / 21));
+        const byWidth = Math.max(12, Math.round(bw / 21));
         // frame (top corners + bottom page num ~3em) + header ~2.5em + bismillah ~2em + 15 lines (30em)
-        const byHeight = Math.max(14, Math.floor(h / 38));
+        const byHeight = Math.max(10, Math.floor(bh / 38));
         return Math.min(byWidth, byHeight);
     }
 
@@ -1600,7 +1601,9 @@
         const pageEl = document.getElementById('mushaf-page');
         pageEl.innerHTML = '<div class="mushaf-loading">Loading…</div>';
 
-        const [fontName, lines] = await Promise.all([loadMushafFont(p), getPageWords(p)]);
+        const [fontName, lines, coords] = await Promise.all([
+            loadMushafFont(p), getPageWords(p), getPageCoords(p)
+        ]);
         if (mushafPage !== p || !document.getElementById('mushaf-panel').classList.contains('visible')) return;
         if (!lines) {
             pageEl.innerHTML = '<div class="mushaf-loading">Could not load page. Check connection.</div>';
@@ -1612,7 +1615,19 @@
             return;
         }
 
-        let fs = mushafFontSize();
+        // Plain mode occupies the SAME box as the classic page image (same
+        // aspect ratio, fitted to both axes) so switching modes never shifts
+        // the layout — the frame is a portrait box like the scanned page.
+        const iw = (coords && coords.w) ? coords.w : (p <= 2 ? 486 : 645);
+        const ih = (coords && coords.h) ? coords.h : (p <= 2 ? 738 : 1000);
+        const panel = document.getElementById('mushaf-panel');
+        const body = document.getElementById('mushaf-page');
+        const availW = (panel ? panel.getBoundingClientRect().width : 430) - 32;
+        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32);
+        const dispW = Math.min(availW, availH * iw / ih);
+        const maxW = Math.min(dispW, iw);
+        const frameH = Math.round(maxW * ih / iw);
+        let fs = mushafFontSize(maxW, frameH);
         const fontFamily = fontName ? `'${fontName}'` : null;
 
         // Build the full 15-line page: line 1..15, with surah header + bismillah
@@ -1637,7 +1652,7 @@
 
         let html = buildPlainHtml(slots, lineNums, fs, fontFamily);
         let frameHtml = (fs2) => `
-            <div class="mf-frame" style="font-size:${fs2}px">
+            <div class="mf-frame" style="font-size:${fs2}px;width:${maxW}px;height:${frameH}px;">
                 <div class="mf-frame-top">
                     <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
                     <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
@@ -1679,8 +1694,17 @@
                     if (w > worstW) { worstW = w; worst = line; }
                 }
             }
-            if (!worst) break;
-            fs = Math.max(12, Math.floor(fs * cw / worstW * 10) / 10);
+            let shrink = 1;
+            if (worst) shrink = cw / worstW;
+            // Height budget: the frame is a fixed classic-style box — content
+            // (corners + header + lines) must end above the page-number row.
+            const frameR = pageEl.querySelector('.mf-frame').getBoundingClientRect();
+            const bottomR = pageEl.querySelector('.mf-frame-bottom').getBoundingClientRect();
+            const hBudget = frameR.height - (bottomR.height || 0) - 1;
+            const hUsed = bottomR.top - frameR.top;
+            if (hUsed > hBudget) shrink = Math.min(shrink, hBudget / hUsed);
+            if (shrink >= 0.995) break;
+            fs = Math.max(7, Math.floor(fs * shrink * 10) / 10);
             html = buildPlainHtml(slots, lineNums, fs, fontFamily);
             pageEl.innerHTML = frameHtml(fs);
         }
@@ -2048,12 +2072,13 @@
             const goBtn = document.getElementById('mushaf-go-btn');
             if (goBtn) goBtn.addEventListener('click', go);
         }
-        // reveal-next button (rendered dynamically in both plain & classic)
-        // → delegate: one listener on the page container catches all clicks
+        // reveal-next trigger (rendered dynamically in both plain & classic)
+        // → delegate: one listener on the page container catches clicks on the
+        // button AND on the empty footer strip below the page image/text.
         const pageEl = document.getElementById('mushaf-page');
         if (pageEl) {
             pageEl.addEventListener('click', e => {
-                if (e.target.closest('.mushaf-reveal-next')) mushafRevealNext();
+                if (e.target.closest('.mushaf-reveal-next, .mf-foot')) mushafRevealNext();
             });
         }
     })();
