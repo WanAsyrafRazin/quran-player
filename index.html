@@ -1516,35 +1516,63 @@
         }
     }
 
+    // Pages 1–2: quran.com's API line grouping differs from the printed
+    // easyquran/Dar al-Marefa layout (the Fatiha page + page 2 spread the
+    // text differently). These counts re-chunk the word sequence (words +
+    // ayah-end markers, in reading order) to match the page images exactly.
+    // Verified against the scanned pages: page-coords/{1,2}.json + image bands.
+    const PAGE_LINE_SPLITS = {
+        1: [5, 5, 7, 5, 5, 5, 4], // lines 2–8: basmalah | الحمد.. | الرحمن الرحيم مالك يوم الدين | إياك.. | اهدنا الصراط المستقيم صراط | الذين أنعمت عليهم غير المغضوب | عليهم ولا الضالين
+        2: [8, 6, 5, 9, 5, 8]     // lines 3–8
+    };
+
     async function getPageWords(p) {
         if (pageWords[p]) return pageWords[p];
+        let lines = null;
         const cached = localStorage.getItem('qp_pagewords_' + p);
         if (cached) {
-            try { pageWords[p] = JSON.parse(cached); return pageWords[p]; } catch (e) {}
+            try { lines = JSON.parse(cached); } catch (e) {}
         }
-        try {
-            const res = await fetch(`${MUSHAF_WORDS_API}${p}?per_page=50&words=true&word_fields=text_uthmani,line_number,position,page_number,char_type_name`);
-            const data = await res.json();
-            const lines = {};
-            (data.verses || []).forEach(v => {
-                const surah = parseInt(v.verse_key.split(':')[0]);
-                const ayah = parseInt(v.verse_key.split(':')[1]);
-                v.words.forEach(w => {
-                    const ln = w.line_number;
-                    if (!lines[ln]) lines[ln] = [];
-                    lines[ln].push({
-                        text: w.text_uthmani,
-                        type: w.char_type_name === 'end' ? 'end' : 'word',
-                        surah, ayah
+        if (!lines) {
+            try {
+                const res = await fetch(`${MUSHAF_WORDS_API}${p}?per_page=50&words=true&word_fields=text_uthmani,line_number,position,page_number,char_type_name`);
+                const data = await res.json();
+                lines = {};
+                (data.verses || []).forEach(v => {
+                    const surah = parseInt(v.verse_key.split(':')[0]);
+                    const ayah = parseInt(v.verse_key.split(':')[1]);
+                    v.words.forEach(w => {
+                        const ln = w.line_number;
+                        if (!lines[ln]) lines[ln] = [];
+                        lines[ln].push({
+                            text: w.text_uthmani,
+                            type: w.char_type_name === 'end' ? 'end' : 'word',
+                            surah, ayah
+                        });
                     });
                 });
-            });
-            pageWords[p] = lines;
-            try { localStorage.setItem('qp_pagewords_' + p, JSON.stringify(lines)); } catch (e) {}
-            return lines;
-        } catch (e) {
-            return null;
+                try { localStorage.setItem('qp_pagewords_' + p, JSON.stringify(lines)); } catch (e) {}
+            } catch (e) {
+                return null;
+            }
         }
+        // Pages 1–2: re-chunk into the printed page's line grouping (applies
+        // to cached data too, so older wrong groupings get corrected).
+        const splits = PAGE_LINE_SPLITS[p];
+        if (splits) {
+            const lnKeys = Object.keys(lines).map(Number).sort((a, b) => a - b);
+            const flat = [];
+            lnKeys.forEach(ln => flat.push(...lines[ln]));
+            const rebuilt = {};
+            let idx = 0;
+            splits.forEach((count, i) => {
+                rebuilt[lnKeys[0] + i] = flat.slice(idx, idx + count);
+                idx += count;
+            });
+            lines = rebuilt;
+        }
+        pageWords[p] = lines;
+        return lines;
     }
 
     const pageCoords = {}; // page -> precomputed per-ayah rects (image px)
@@ -2084,8 +2112,8 @@
             pageEl.addEventListener('click', e => {
                 if (e.target.closest('.mf-foot')) mushafRevealNext();
             });
-            // Swipe left/right on the page → next/previous page (RTL reading
-            // flows right→left, so a left swipe advances like the ◀ arrow).
+            // Swipe right/left on the page → next/previous page (like flipping
+            // a physical mushaf page: the next page advances toward the right).
             let swipeStart = null;
             let lastSwipeAt = 0;
             pageEl.addEventListener('touchstart', e => {
@@ -2103,7 +2131,7 @@
                 if (Math.abs(dx) < 45) return;              // not horizontal enough
                 if (Math.abs(dx) < Math.abs(dy) * 1.2) return; // more vertical than horizontal
                 lastSwipeAt = Date.now();
-                mushafGo(dx < 0 ? 1 : -1);
+                mushafGo(dx < 0 ? -1 : 1); // right swipe → next page, left swipe → previous
             }, { passive: true });
             pageEl.addEventListener('touchcancel', () => { swipeStart = null; });
             // the browser fires a synthetic click after the swipe ends — swallow
