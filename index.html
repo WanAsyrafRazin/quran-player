@@ -44,6 +44,8 @@
             display: flex;
             justify-content: flex-end;
             gap: 8px;
+            /* safe-area: keep the theme toggle below the status bar / island */
+            padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
             margin-bottom: 12px;
         }
 
@@ -138,6 +140,8 @@
             padding: 18px 16px calc(14px + env(safe-area-inset-bottom, 0px));
             background: #FDFBF4;
             flex: 1;
+            /* horizontal gestures (page swipes) belong to the app, not the browser */
+            touch-action: pan-y;
         }
         .mushaf-loading {
             text-align: center;
@@ -372,19 +376,31 @@
         body.dark-mode .mushaf-pagelabel { color: #A0AEC0; }
         body.dark-mode .mushaf-page-input { background: #2A3A44; color: #EDF2F7; border-color: #4A5568; }
         /* Footer strip below the page: the empty region is the reveal-next
-           tap target (page number stays dead-centered in classic mode) */
+           tap target (page number stays dead-centered in classic mode, with
+           a hint line under it) */
         .mf-foot {
             position: relative;
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            min-height: 50px;
+            min-height: 78px;
             margin-top: 10px;
             flex-shrink: 0;
             cursor: pointer;
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
         }
+        .mf-foot-hint {
+            position: absolute;
+            top: calc(50% + 15px);
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: #8E919D;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        body.dark-mode .mf-foot-hint { color: #718096; }
         .mf-classic-pagenum {
             position: absolute;
             left: 50%;
@@ -1076,9 +1092,9 @@
     <!-- Floating Mushaf window (QCF text-rendered, per-ayah cloze at exact positions) -->
     <div class="mushaf-float" id="mushaf-panel">
         <div class="mushaf-float-header" id="mushaf-drag">
-            <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(-1)" aria-label="Previous page">◀</button>
+            <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(1)" aria-label="Next page" title="Next page">◀</button>
             <div class="mushaf-float-title" id="mushaf-info">Loading…</div>
-            <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(1)" aria-label="Next page">▶</button>
+            <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(-1)" aria-label="Previous page" title="Previous page">▶</button>
             <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle page style" title="Plain text — tap to switch">⬛</button>
             <button class="mushaf-nav" id="mushaf-theme-btn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Night mode">🌙</button>
             <button class="mushaf-float-close" id="mushaf-close" onclick="toggleMushaf()" aria-label="Close Mushaf">✕</button>
@@ -1582,8 +1598,10 @@
                 ? `📖 Page ${p} · ${first.surahName} ${first.ayahNum}–${last.ayahNum}`
                 : `📖 Page ${p} · ${first.surahName} ${first.ayahNum} – ${last.surahName} ${last.ayahNum}`)
             : `📖 Page ${p}`;
-        document.getElementById('mushaf-prev').disabled = p <= 1;
-        document.getElementById('mushaf-next').disabled = p >= 604;
+        // RTL navigation: the LEFT arrow advances to the next page, the RIGHT
+        // arrow goes back (mushaf reading flows right → left)
+        document.getElementById('mushaf-prev').disabled = p >= 604;
+        document.getElementById('mushaf-next').disabled = p <= 1;
 
         const pageEl = document.getElementById('mushaf-page');
         pageEl.innerHTML = '<div class="mushaf-loading">Loading…</div>';
@@ -1647,7 +1665,7 @@
                 <div class="mf-frame-mid">${html}</div>
                 <div class="mf-frame-bottom"><span class="mf-corner-box mf-pagenum">${toArabicDigits(p)}</span></div>
             </div>
-            <div class="mf-foot"></div>`;
+            <div class="mf-foot"><span class="mf-foot-hint">👆 Tap empty space to reveal one by one</span></div>`;
         pageEl.innerHTML = frameHtml(fs);
 
         // Fit-to-width safety net: justify stretches lines to the container, but
@@ -1828,6 +1846,7 @@
             </div>
             <div class="mf-foot">
                 <span class="mf-classic-pagenum">${toArabicDigits(p)}</span>
+                <span class="mf-foot-hint">👆 Tap empty space to reveal one by one</span>
             </div>`;
         updateToggleAllBtn();
     }
@@ -2065,6 +2084,37 @@
             pageEl.addEventListener('click', e => {
                 if (e.target.closest('.mf-foot')) mushafRevealNext();
             });
+            // Swipe left/right on the page → next/previous page (RTL reading
+            // flows right→left, so a left swipe advances like the ◀ arrow).
+            let swipeStart = null;
+            let lastSwipeAt = 0;
+            pageEl.addEventListener('touchstart', e => {
+                const t = e.touches[0];
+                swipeStart = { x: t.clientX, y: t.clientY, t: Date.now() };
+            }, { passive: true });
+            pageEl.addEventListener('touchend', e => {
+                if (!swipeStart) return;
+                const t = e.changedTouches[0];
+                const dx = t.clientX - swipeStart.x;
+                const dy = t.clientY - swipeStart.y;
+                const dt = Date.now() - swipeStart.t;
+                swipeStart = null;
+                if (dt > 600) return;                       // too slow → a tap/long-press
+                if (Math.abs(dx) < 45) return;              // not horizontal enough
+                if (Math.abs(dx) < Math.abs(dy) * 1.2) return; // more vertical than horizontal
+                lastSwipeAt = Date.now();
+                mushafGo(dx < 0 ? 1 : -1);
+            }, { passive: true });
+            pageEl.addEventListener('touchcancel', () => { swipeStart = null; });
+            // the browser fires a synthetic click after the swipe ends — swallow
+            // it (capture phase, before verse/classicTap handlers) so a page
+            // swipe never accidentally toggles a cloze cover.
+            pageEl.addEventListener('click', e => {
+                if (Date.now() - lastSwipeAt < 700) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                }
+            }, true);
         }
     })();
 
