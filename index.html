@@ -159,8 +159,19 @@
             white-space: nowrap;
         }
         .mf-line.mf-line-end {
-            /* last line of a surah: naturally short, centered like the printed page */
+            /* surah-final lines are justified like every other line by
+               default; only compact pages (see .mf-compact below) center
+               and narrow them like the printed page */
+        }
+        /* Compact pages — page 1–2 and the short final surahs (Al-Qariah,
+           Quraisy, Kauthar, Nasr, Falaq, Nas): few words per line, so the
+           full-width justify looks too stretched. Narrow the text block,
+           and let the surah-final line hug its few words (centered). */
+        .mf-compact .mf-frame-mid { padding: 0 9%; }
+        .mf-compact .mf-line.mf-line-end {
             text-align-last: center;
+            width: fit-content;
+            margin: 0 auto;
         }
         .mf-line .mf-verse { display: inline; }
         /* Plain-text page frame: printed-mushaf corners — juz top-left,
@@ -216,6 +227,20 @@
             height: 100%;
             object-fit: contain;
         }
+        /* Classic-mode corner labels (juz top-left, surah name top-right),
+           mirroring the plain frame's corner boxes */
+        .mf-classic-corners {
+            position: absolute;
+            top: 8px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            direction: rtl;
+            z-index: 4;
+            pointer-events: none;
+        }
+        .mf-classic-corners .mf-corner-box { font-size: 12px; }
         .mf-classic .mf-classic-text {
             position: absolute;
             inset: 0;
@@ -226,13 +251,20 @@
         .mf-classic .mf-classic-text .mf-word { color: transparent; }
         .mf-classic .mf-classic-text .mf-end { color: transparent; }
         .mf-classic .mf-classic-text .mf-cover {
-            background: linear-gradient(140deg, rgba(46,74,122,.92), rgba(27,47,82,.94));
-            box-shadow: 0 2px 10px rgba(0,0,0,.35);
+            background: #FDFBF4;
+            box-shadow:
+                inset 0 2px 3px rgba(90, 60, 20, .28),
+                inset 0 -2px 3px rgba(255, 255, 255, .7),
+                0 0 0 1px rgba(120, 90, 30, .12);
         }
         .mf-classic .mf-classic-text .mf-verse:hover { background: transparent; }
         body.dark-mode .mf-classic { background: #1A232E; }
         body.dark-mode .mf-classic .mf-classic-text .mf-cover {
-            background: linear-gradient(140deg, rgba(90,110,150,.95), rgba(40,55,85,.96));
+            background: #1A232E;
+            box-shadow:
+                inset 0 2px 3px rgba(0, 0, 0, .65),
+                inset 0 -1px 2px rgba(255, 255, 255, .07),
+                0 0 0 1px rgba(255, 255, 255, .05);
         }
         .mf-verse {
             position: relative;
@@ -264,16 +296,29 @@
             max-height: 48px;
             min-height: 18px;
             padding: 2px 8px;
-            background: linear-gradient(140deg, #2E4A7A, #1B2F52);
-            color: #FFFFFF;
-            border-radius: 8px;
+            /* cloze blends with the page: same background colour, with an
+               inset bevel so the cover looks embossed/bezelled into the page */
+            background: #FDFBF4;
+            color: #A9803B;
+            border-radius: 7px;
+            box-shadow:
+                inset 0 2px 3px rgba(90, 60, 20, .28),
+                inset 0 -2px 3px rgba(255, 255, 255, .7),
+                0 0 0 1px rgba(120, 90, 30, .12);
             display: none;
             align-items: center;
             justify-content: center;
             font-family: 'Geeza Pro', sans-serif;
             font-weight: 700;
             z-index: 3;
-            box-shadow: 0 2px 8px rgba(0,0,0,.28);
+        }
+        body.dark-mode .mf-cover {
+            background: #1A232E;
+            color: #D9B877;
+            box-shadow:
+                inset 0 2px 3px rgba(0, 0, 0, .65),
+                inset 0 -1px 2px rgba(255, 255, 255, .07),
+                0 0 0 1px rgba(255, 255, 255, .05);
         }
         .mf-verse.covered .mf-cover { display: flex; }
         .mf-verse.covered .mf-word { visibility: hidden; }
@@ -1663,6 +1708,14 @@
         let fs = mushafFontSize(maxW, frameH);
         const fontFamily = fontName ? `'${fontName}'` : null;
 
+        // Compact layout: pages 1–2 and the short final surahs have few words
+        // per line — full-width justify stretches them too much, so narrow the
+        // text block (and the surah-final line hugs its words, centered).
+        const COMPACT_SURAHS = new Set([101, 106, 108, 110, 113, 114]);
+        const surahsHere = new Set();
+        Object.values(lines).forEach(ws => ws.forEach(w => surahsHere.add(w.surah)));
+        const isCompact = p <= 2 || [...surahsHere].some(s => COMPACT_SURAHS.has(s));
+
         // Build the full 15-line page: line 1..15, with surah header + bismillah
         // slots where the API's word line numbers have gaps (surah starts).
         const lineNums = Object.keys(lines).map(Number).sort((a, b) => a - b);
@@ -1685,7 +1738,7 @@
 
         let html = buildPlainHtml(slots, lineNums, fs, fontFamily);
         let frameHtml = (fs2) => `
-            <div class="mf-frame" style="font-size:${fs2}px;width:${maxW}px;height:${frameH}px;">
+            <div class="mf-frame${isCompact ? ' mf-compact' : ''}" style="font-size:${fs2}px;width:${maxW}px;height:${frameH}px;">
                 <div class="mf-frame-top">
                     <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
                     <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
@@ -1769,6 +1822,7 @@
     // INVISIBLE QCF text layer calibrated (via image grid detection) to measure
     // each verse's exact position — cloze covers land precisely on the page.
     async function showClassicPage(pageEl, p, lines, fontName) {
+        const { first } = pageInfo(p);
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.src = MUSHAF_PAGE_IMG + p + '.jpg';
@@ -1870,6 +1924,10 @@
         pageEl.innerHTML = `
             <div class="mf-classic" style="aspect-ratio:${iw}/${ih};width:${maxW}px;" onclick="classicTap(event)">
                 <img class="mf-classic-img" src="${MUSHAF_PAGE_IMG}${p}.jpg" alt="Page ${p}">
+                <div class="mf-classic-corners">
+                    <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
+                    <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
+                </div>
                 ${textLayer}${coversHtml}
             </div>
             <div class="mf-foot">
@@ -2143,7 +2201,24 @@
                     e.preventDefault();
                 }
             }, true);
+            // Trackpad two-finger swipe / mouse tilt-wheel → page navigation
+            // (horizontal only; vertical wheel does nothing in the overlay).
+            pageEl.addEventListener('wheel', e => {
+                e.preventDefault();
+                if (Math.abs(e.deltaX) < 30) return;
+                mushafGo(e.deltaX < 0 ? 1 : -1);
+            }, { passive: false });
         }
+        // Keyboard: ← → navigate pages (mushaf RTL — left advances like the
+        // ◀ button), Space reveals cloze one by one. Ignored while typing.
+        document.addEventListener('keydown', e => {
+            if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
+            const tag = (e.target.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+            if (e.key === 'ArrowLeft') { e.preventDefault(); mushafGo(1); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); mushafGo(-1); }
+            else if (e.code === 'Space' || e.key === ' ') { e.preventDefault(); mushafRevealNext(); }
+        });
     })();
 
     // Fullscreen overlay: no dragging (the mushaf now replaces the whole screen)
