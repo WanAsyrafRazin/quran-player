@@ -165,10 +165,10 @@
         }
         /* Compact pages — page 1–2 and the short final surahs (Al-Qariah,
            Quraisy, Kauthar, Nasr, Falaq, Nas): few words per line, so the
-           full-width justify looks too stretched. Narrow the text block,
-           and let the surah-final line hug its few words (centered). */
-        .mf-compact .mf-frame-mid { padding: 0 9%; }
-        .mf-compact .mf-line.mf-line-end {
+           full-width justify looks too stretched. Every text line hugs its
+           words at natural spacing and centers, like the printed Fatiha
+           spread (the surah banner stays full-width like other pages). */
+        .mf-compact .mf-frame-mid .mf-line {
             text-align-last: center;
             width: fit-content;
             margin: 0 auto;
@@ -251,7 +251,7 @@
         .mf-classic .mf-classic-text .mf-word { color: transparent; }
         .mf-classic .mf-classic-text .mf-end { color: transparent; }
         .mf-classic .mf-classic-text .mf-cover {
-            background: #FDFBF4;
+            background: var(--mf-cover-bg, #FDFBF4);
             box-shadow:
                 inset 0 2px 3px rgba(90, 60, 20, .28),
                 inset 0 -2px 3px rgba(255, 255, 255, .7),
@@ -259,12 +259,11 @@
         }
         .mf-classic .mf-classic-text .mf-verse:hover { background: transparent; }
         body.dark-mode .mf-classic { background: #1A232E; }
-        body.dark-mode .mf-classic .mf-classic-text .mf-cover {
-            background: #1A232E;
-            box-shadow:
-                inset 0 2px 3px rgba(0, 0, 0, .65),
-                inset 0 -1px 2px rgba(255, 255, 255, .07),
-                0 0 0 1px rgba(255, 255, 255, .05);
+        /* classic cloze covers always match the scanned page image background
+           (sampled per page into --mf-cover-bg) — not the app background,
+           and not the dark-mode background */
+        .mf-classic > .mf-verse .mf-cover {
+            background: var(--mf-cover-bg, #FDFBF4);
         }
         .mf-verse {
             position: relative;
@@ -1797,6 +1796,15 @@
 
     // Build the 15-line plain page HTML (slots → header / bismillah / words).
     function buildPlainHtml(slots, lineNums, fs, fontFamily) {
+        // ordered word stream of the page — used to detect the TRUE surah-final
+        // line (the one whose last word is followed by a different surah or
+        // nothing), not merely any line ending inside the final ayah.
+        const allWords = [];
+        for (let ln = 1; ln <= 15; ln++) {
+            const c = slots[ln];
+            if (Array.isArray(c)) allWords.push(...c);
+        }
+        const idxOf = new Map(allWords.map((w, i) => [w, i]));
         let html = '';
         for (let ln = 1; ln <= 15; ln++) {
             const content = slots[ln];
@@ -1805,10 +1813,10 @@
             } else if (content === 'bismillah') {
                 html += bismillahHtml(fs, fontFamily);
             } else if (content) {
-                // last line of a surah (its final ayah ends here) → short,
-                // centered like the printed page instead of force-justified
                 const lastW = content[content.length - 1];
-                const isSurahEnd = lastW && lastW.ayah === maxAyahOfSurah(lastW.surah);
+                const wi = idxOf.get(lastW);
+                const nxt = wi !== undefined ? allWords[wi + 1] : null;
+                const isSurahEnd = !!lastW && (!nxt || nxt.surah !== lastW.surah);
                 html += mushafLineHtml(content, fs, fontFamily, false, isSurahEnd);
             } else {
                 // empty slot on a normal 15-line page — render a blank justified line
@@ -1829,6 +1837,22 @@
         await new Promise(res => { img.onload = res; img.onerror = res; });
         if (mushafPage !== p || !document.getElementById('mushaf-panel').classList.contains('visible')) return;
         const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+
+        // Sample the scan's background colour so cloze covers blend with the
+        // IMAGE, not the web background. A small downsampled canvas makes the
+        // cream page background dominate; the per-channel median ignores the
+        // dark text and decorative ornaments.
+        try {
+            const cv = document.createElement('canvas');
+            cv.width = 48; cv.height = 48;
+            const cx = cv.getContext('2d');
+            cx.drawImage(img, 0, 0, 48, 48);
+            const d = cx.getImageData(0, 0, 48, 48).data;
+            const Rs = [], Gs = [], Bs = [];
+            for (let i = 0; i < d.length; i += 4) { Rs.push(d[i]); Gs.push(d[i + 1]); Bs.push(d[i + 2]); }
+            const med = a => a.sort((x, y) => x - y)[a.length >> 1];
+            pageEl.style.setProperty('--mf-cover-bg', `rgb(${med(Rs)}, ${med(Gs)}, ${med(Bs)})`);
+        } catch (e) { /* canvas blocked or image tainted — fall back to default */ }
 
         // Panel body size: the fullscreen window should show the WHOLE page
         // (image + all 15 lines) with no internal scrolling — fit both axes.
@@ -2203,9 +2227,15 @@
             }, true);
             // Trackpad two-finger swipe / mouse tilt-wheel → page navigation
             // (horizontal only; vertical wheel does nothing in the overlay).
+            // One gesture fires many wheel events — a cooldown makes a whole
+            // swipe (any length/speed) flip exactly ONE page.
+            let lastWheelNav = 0;
             pageEl.addEventListener('wheel', e => {
                 e.preventDefault();
+                const now = Date.now();
+                if (now - lastWheelNav < 600) return;
                 if (Math.abs(e.deltaX) < 30) return;
+                lastWheelNav = now;
                 mushafGo(e.deltaX < 0 ? 1 : -1);
             }, { passive: false });
         }
