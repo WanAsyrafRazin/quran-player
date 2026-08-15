@@ -2124,6 +2124,95 @@
     // If everything is already revealed, re-cloze the whole page first so
     // the button acts as a study loop: tap → cover all, tap → reveal 1st,
     // tap → reveal 2nd, ... until all shown, then tap → cover all again.
+    // Study-mode cloze helpers. Verse order is top→bottom (plain: DOM line
+    // order; classic: topmost fragment first). One representative element per
+    // verse — toggling it covers/reveals every fragment of that verse.
+    function orderedVerseEls() {
+        const mid = document.querySelector('.mf-frame-mid');
+        const seen = new Set();
+        const out = [];
+        if (mid) {
+            for (const line of mid.children) {
+                for (const v of line.querySelectorAll('.mf-verse')) {
+                    const k = v.dataset.vkey;
+                    if (!seen.has(k)) { seen.add(k); out.push(v); }
+                }
+            }
+            return out;
+        }
+        // classic: group fragments by verse, order by topmost position
+        const byKey = new Map();
+        document.querySelectorAll('#mushaf-page .mf-verse').forEach(v => {
+            const k = v.dataset.vkey;
+            if (k) { if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(v); }
+        });
+        return [...byKey.values()]
+            .map(frags => ({ top: Math.min(...frags.map(f => f.getBoundingClientRect().top)), el: frags[0] }))
+            .sort((a, b) => a.top - b.top)
+            .map(x => x.el);
+    }
+
+    // 1..15 line span of a verse (plain: which .mf-line slots hold it; classic:
+    // approx from fragment positions against the 15-line image grid).
+    function verseLineRange(el) {
+        const k = el.dataset.vkey;
+        const mid = document.querySelector('.mf-frame-mid');
+        if (mid) {
+            let lo = 99, hi = 0;
+            [...mid.children].forEach((line, i) => {
+                if (line.querySelector(`.mf-verse[data-vkey="${k}"]`)) {
+                    lo = Math.min(lo, i + 1);
+                    hi = Math.max(hi, i + 1);
+                }
+            });
+            return [Math.max(1, lo), Math.min(15, hi)];
+        }
+        const cls = document.querySelector('.mf-classic');
+        if (!cls) return [1, 15];
+        const cr = cls.getBoundingClientRect();
+        let lo = 99, hi = 0;
+        document.querySelectorAll(`.mf-verse[data-vkey="${k}"]`).forEach(f => {
+            const r = f.getBoundingClientRect();
+            const line = Math.floor(((r.top + r.height / 2) - cr.top) / (cr.height / 15)) + 1;
+            lo = Math.min(lo, line);
+            hi = Math.max(hi, line);
+        });
+        return [Math.max(1, lo), Math.min(15, hi)];
+    }
+
+    // Arrow Down: cover verses one at a time, top → bottom.
+    function mushafClozeFromTop() {
+        const list = orderedVerseEls();
+        const target = list.find(el => !el.classList.contains('covered'));
+        if (target) toggleVerseCloze(target);
+        else mushafRevealAll(); // cycle: everything covered → start over
+    }
+
+    // Arrow Up: cover verses one at a time, bottom → top.
+    function mushafClozeFromBottom() {
+        const list = orderedVerseEls();
+        const target = [...list].reverse().find(el => !el.classList.contains('covered'));
+        if (target) toggleVerseCloze(target);
+        else mushafRevealAll();
+    }
+
+    // M: cover everything except the middle band (approx lines 6–10); a verse
+    // that touches that band counts as middle. Press again to reveal all.
+    function mushafClozeMiddleOnly() {
+        let changed = false;
+        orderedVerseEls().forEach(el => {
+            const [lo, hi] = verseLineRange(el);
+            const isMiddle = hi >= 6 && lo <= 10;
+            const shouldCover = !isMiddle;
+            if (el.classList.contains('covered') !== shouldCover) {
+                toggleVerseCloze(el);
+                changed = true;
+            }
+        });
+        if (!changed) mushafRevealAll();
+        updateToggleAllBtn();
+    }
+
     function mushafRevealNext() {
         const page = document.getElementById('mushaf-page');
         if (!page) return;
@@ -2278,6 +2367,9 @@
             if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
             if (e.key === 'ArrowLeft') { e.preventDefault(); mushafGo(1); }
             else if (e.key === 'ArrowRight') { e.preventDefault(); mushafGo(-1); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); mushafClozeFromTop(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); mushafClozeFromBottom(); }
+            else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); mushafClozeMiddleOnly(); }
             else if (e.code === 'Space' || e.key === ' ') { e.preventDefault(); mushafRevealNext(); }
         });
     })();
