@@ -227,17 +227,16 @@
             height: 100%;
             object-fit: contain;
         }
-        /* Classic-mode corner labels (juz top-left, surah name top-right),
-           mirroring the plain frame's corner boxes */
+        /* Classic-mode corner labels (juz left, surah name right) — rendered in
+           their OWN row ABOVE the image (mirroring the plain frame-top), so they
+           never cover the scanned page. */
         .mf-classic-corners {
-            position: absolute;
-            top: 8px;
-            left: 10px;
-            right: 10px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
             direction: rtl;
-            z-index: 4;
+            margin: 0 auto 8px;
+            flex-shrink: 0;
             pointer-events: none;
         }
         .mf-classic-corners .mf-corner-box { font-size: 12px; }
@@ -1875,10 +1874,12 @@
 
         // Panel body size: the fullscreen window should show the WHOLE page
         // (image + all 15 lines) with no internal scrolling — fit both axes.
+        // Reserve ~40px at the top for the juz/surah corners row (rendered above
+        // the image since v43, so it never overlaps the scanned page).
         const panel = document.getElementById('mushaf-panel');
         const body = document.getElementById('mushaf-page');
         const availW = (panel ? panel.getBoundingClientRect().width : 430) - 32;
-        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32);
+        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32 - 40);
         const dispW = Math.min(availW, availH * iw / ih);
         const maxW = Math.min(dispW, iw);
         const scale = maxW / iw;
@@ -1965,12 +1966,12 @@
         }
 
         pageEl.innerHTML = `
+            <div class="mf-classic-corners" style="width:${maxW}px;">
+                <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
+                <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
+            </div>
             <div class="mf-classic" style="aspect-ratio:${iw}/${ih};width:${maxW}px;" onclick="classicTap(event)">
                 <img class="mf-classic-img" src="${displaySrc}" alt="Page ${p}">
-                <div class="mf-classic-corners">
-                    <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
-                    <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
-                </div>
                 ${textLayer}${coversHtml}
             </div>
             <div class="mf-foot">
