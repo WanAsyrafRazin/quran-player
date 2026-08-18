@@ -12,6 +12,14 @@ Two Hermes agents now work on this repo (PC agent + VPS agent). Always
 `git pull` before committing, keep commits small, and push promptly so the
 other agent never builds on a stale tree.
 
+## 2b. TASK CHANNEL IS PRIVATE (2026-08-18, user mandate)
+**Never put VPS→PC task docs in this PUBLIC repo.** Task files
+(webhook-setup, homebridge-tuya, photo-sort, future tasks) live in the
+PRIVATE repo `server-tools/tasks/` (branch `master`). quran-player is
+public (GitHub Pages) — it carries app code only. If you need to hand a
+task to the PC agent, write it to server-tools/tasks/ and push; the PC
+agent watches that folder.
+
 ## 3. QCF font finding (verified, binary-level)
 The `QCF_P{NNN}.TTF` files in `quran/quran.com-images` (raw.githubusercontent)
 are **sanitized/stub fonts**:
