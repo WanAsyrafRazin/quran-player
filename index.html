@@ -2176,6 +2176,7 @@
 
     function mushafRevealAll() {
         document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.remove('covered'));
+        clearAllCoverClips();
         mushafRevealPct = 0;
         updateModeBtns();
         applyMushafReveal();
@@ -2187,37 +2188,48 @@
         const page = document.getElementById('mushaf-page');
         if (!page) return;
         mushafRevealPct = 0; // button clicked → slider resets to default
+        clearAllCoverClips();
         if (mushafClozeMode === 'all') {
-            // → cloze all
+            // → cloze all (fresh, no leftover 1/6 clips)
             mushafClozeMode = 'cloze';
             document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
         } else {
             // cloze/heads → reveal all
             mushafClozeMode = 'all';
             document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.remove('covered'));
-            if (mushafSliderKey) {
-                page.querySelectorAll(`.mf-verse[data-vkey="${mushafSliderKey}"] .mf-cover`).forEach(c => { c.style.clipPath = ''; });
-                mushafSliderKey = null;
-            }
         }
         updateModeBtns();
         applyMushafReveal();
     }
 
     // 1/6 (verse header): cloze everything, then reveal each ayah start.
-    // Only reachable while in cloze mode.
+    // Clicking again toggles it OFF (back to plain cloze). Only reachable
+    // while in cloze mode.
     function mushafSetMode(mode) {
         if (mode === 'heads' && mushafClozeMode === 'all') return; // not in cloze mode
-        mushafClozeMode = mode;
         mushafRevealPct = 0;
         const page = document.getElementById('mushaf-page');
         if (!page) return;
-        if (mode === 'heads') {
+        clearAllCoverClips();
+        if (mode === 'heads' && mushafClozeMode === 'heads') {
+            // toggle off → back to plain cloze (all covered, no headers)
+            mushafClozeMode = 'cloze';
+            document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
+        } else if (mode === 'heads') {
+            // toggle on → cloze everything + reveal the 1/6 headers
+            mushafClozeMode = 'heads';
             document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
             mushafRevealHeads();
         }
         updateModeBtns();
         applyMushafReveal();
+    }
+
+    // Remove every clip-path (1/6 headers AND slider reveals) so a mode
+    // transition always starts from a clean, fully-coverable state.
+    function clearAllCoverClips() {
+        document.querySelectorAll('#mushaf-page .mf-cover').forEach(c => { c.style.clipPath = ''; });
+        mushafSliderKey = null;
     }
 
     function updateModeBtns() {
