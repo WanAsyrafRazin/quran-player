@@ -42,11 +42,31 @@
         /* Top Bar & Theme Toggle */
         .top-bar {
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
+            align-items: center;
             gap: 8px;
             /* safe-area: keep the theme toggle below the status bar / island */
             padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
             margin-bottom: 12px;
+        }
+
+        /* Version badge (build number) — top-left, in line with the moon toggle */
+        .version-badge {
+            font-size: 11px;
+            font-weight: 700;
+            color: #8E919D;
+            background: #F1F3F5;
+            border: 1px solid #E2E6EA;
+            border-radius: 20px;
+            padding: 6px 12px;
+            letter-spacing: 0.4px;
+            user-select: none;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+        }
+        body.dark-mode .version-badge {
+            color: #A0AEC0;
+            background: #141B24;
+            border-color: #2D3748;
         }
 
         .theme-toggle {
@@ -459,6 +479,78 @@
         .mushaf-mode-btn.active {
             background: #2F6B4F;
             border-color: #2F6B4F;
+            color: #FFFFFF;
+        }
+        /* Head | آيَة | Tail rectangle — رَأْس and ذَيْل are toggleable,
+           آيَة is a static label. Appears only while cloze is on. */
+        .mushaf-ht {
+            display: flex;
+            align-items: stretch;
+            border: 1px solid #C9A96A;
+            border-radius: 9px;
+            overflow: hidden;
+            flex-shrink: 0;
+            background: #FDFBF4;
+            /* RTL mirrors the verse: رَأْس (head) at the right, ذَيْل (tail)
+               at the left — like the ayah itself flows right → left */
+            direction: rtl;
+        }
+        .mushaf-ht-btn {
+            border: none;
+            background: #FDFBF4;
+            color: #7A5A1E;
+            padding: 5px 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .mushaf-ht-btn.active {
+            background: #2F6B4F;
+            color: #FFFFFF;
+        }
+        .mushaf-ht-label {
+            display: flex;
+            align-items: center;
+            padding: 5px 7px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #A9803B;
+            background: #F3E9D2;
+            border-left: 1px solid #C9A96A;
+            border-right: 1px solid #C9A96A;
+            white-space: nowrap;
+            user-select: none;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* صَفْحَة state (all verses): highlight the center label */
+        .mushaf-ht-label.active {
+            background: #2F6B4F;
+            color: #FFFFFF;
+        }
+        body.dark-mode .mushaf-ht {
+            background: #1A232E;
+            border-color: #4A5568;
+        }
+        body.dark-mode .mushaf-ht-btn {
+            background: #1A232E;
+            color: #E8D5A0;
+        }
+        body.dark-mode .mushaf-ht-btn.active {
+            background: #2F6B4F;
+            color: #FFFFFF;
+        }
+        body.dark-mode .mushaf-ht-label {
+            background: #141B24;
+            color: #D9B877;
+            border-color: #4A5568;
+        }
+        body.dark-mode .mushaf-ht-label.active {
+            background: #2F6B4F;
             color: #FFFFFF;
         }
         body.dark-mode .mushaf-mode-btn {
@@ -1119,8 +1211,9 @@
 <body>
 
 <div class="player-container">
-    <!-- Top Right Theme Toggle -->
+    <!-- Top Bar: version badge (left) + Theme Toggle (right) -->
     <div class="top-bar">
+        <span class="version-badge" id="version-badge">…</span>
         <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌙</button>
     </div>
 
@@ -1229,7 +1322,11 @@
             </label>
             <div class="mushaf-mode-group" id="mushaf-mode-group">
                 <button type="button" class="mushaf-mode-btn" id="mushaf-toggle-all" onclick="mushafToggleAll()">🔒 Cloze All</button>
-                <button type="button" class="mushaf-mode-btn" id="mushaf-heads-btn" onclick="mushafSetMode('heads')" style="display:none">1/6</button>
+                <div class="mushaf-ht" id="mushaf-ht" style="display:none">
+                    <button type="button" class="mushaf-ht-btn" id="mushaf-head-btn" onclick="mushafSetHT('head')">رَأْس</button>
+                    <button type="button" class="mushaf-ht-label" id="mushaf-scope-btn" onclick="mushafToggleScope()">آيَة</button>
+                    <button type="button" class="mushaf-ht-btn" id="mushaf-tail-btn" onclick="mushafSetHT('tail')">ذَيْل</button>
+                </div>
             </div>
         </div>
         <div class="mushaf-float-body" id="mushaf-page"></div>
@@ -1274,6 +1371,12 @@
 </div>
 
 <script>
+    // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
+    const APP_VERSION = 'v48';
+    (function () {
+        const b = document.getElementById('version-badge');
+        if (b) b.textContent = APP_VERSION;
+    })();
     // --- Dark Mode Logic ---
     function setThemeButtons(isDark) {
         const icon = isDark ? '☀️' : '🌙';
@@ -1542,7 +1645,9 @@
     const pageWords = {};     // page -> {lines: {lineNum: [{text,type,surah,ayah}]}}
     let mushafRevealPct = 0;  // slider: % of the active ayah to unveil (0=covered, 100=all)
     let mushafSliderKey = null; // ayah key whose covers the slider currently manages
-    let mushafClozeMode = 'all'; // 3-mode study control: cloze | heads | all
+    let mushafClozeMode = 'all'; // study control: cloze | heads | all
+    let mushafHTMode = null;   // head|آيَة|tail: null | 'head' | 'tail'
+    let mushafScope = 'all';   // 1/1 | all: 'one' | 'all'
     const MUSHAF_PAGE_IMG = 'https://raw.githubusercontent.com/QuranHub/quran-pages-images/main/easyquran.com/hafs-tajweed/';
 
     function toArabicDigits(n) {
@@ -2170,6 +2275,11 @@
         });
         // verse clicked → slider resets to its default (right side, 0)
         mushafRevealPct = 0;
+        // keep the armed head/tail setting applied to the active ayah
+        if (mushafHTMode) {
+            clearAllCoverClips();
+            applyHTReveal();
+        }
         updateModeBtns();
         applyMushafReveal();
     }
@@ -2178,23 +2288,27 @@
         document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.remove('covered'));
         clearAllCoverClips();
         mushafRevealPct = 0;
+        mushafHTMode = null;
         updateModeBtns();
         applyMushafReveal();
     }
 
     // Study controls: a single toggle alternates Cloze All ↔ Reveal All.
-    // The 1/6 (verse header) button appears ONLY while in cloze mode.
+    // The head|آيَة|tail controls appear ONLY while in cloze mode. When an
+    // HT setting (head/tail/both) is on, triggering Cloze All re-applies it
+    // automatically (آيَة scope → the active ayah, صَفْحَة → all verses).
     function mushafToggleAll() {
         const page = document.getElementById('mushaf-page');
         if (!page) return;
         mushafRevealPct = 0; // button clicked → slider resets to default
         clearAllCoverClips();
         if (mushafClozeMode === 'all') {
-            // → cloze all (fresh, no leftover 1/6 clips)
+            // → cloze all (fresh, then re-apply any active head/tail setting)
             mushafClozeMode = 'cloze';
             document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
+            if (mushafHTMode) applyHTReveal();
         } else {
-            // cloze/heads → reveal all
+            // cloze/heads → reveal all (HT setting stays armed for next cloze)
             mushafClozeMode = 'all';
             document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.remove('covered'));
         }
@@ -2202,27 +2316,129 @@
         applyMushafReveal();
     }
 
-    // 1/6 (verse header): cloze everything, then reveal each ayah start.
-    // Clicking again toggles it OFF (back to plain cloze). Only reachable
-    // while in cloze mode.
-    function mushafSetMode(mode) {
-        if (mode === 'heads' && mushafClozeMode === 'all') return; // not in cloze mode
-        mushafRevealPct = 0;
+    // Head|آيَة|Tail control: رَأْس reveals the first 1/6 of each ayah,
+    // ذَيْل reveals the LAST 1/6. Both can be active at once. Clicking the
+    // active one toggles it off.
+    function mushafSetHT(part) {
         const page = document.getElementById('mushaf-page');
         if (!page) return;
+        mushafRevealPct = 0;
         clearAllCoverClips();
-        if (mode === 'heads' && mushafClozeMode === 'heads') {
-            // toggle off → back to plain cloze (all covered, no headers)
-            mushafClozeMode = 'cloze';
-            document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
-        } else if (mode === 'heads') {
-            // toggle on → cloze everything + reveal the 1/6 headers
+        // toggle head/tail in a 4-state: off → on → both → (click one) → the other
+        if (mushafHTMode === part) {
+            mushafHTMode = null; // clicked active part → off
+        } else if (mushafHTMode === null) {
+            mushafHTMode = part; // first part on
+        } else if (mushafHTMode === 'both') {
+            mushafHTMode = part === 'head' ? 'tail' : 'head'; // drop the clicked part
+        } else {
+            mushafHTMode = 'both'; // second part joins
+        }
+        if (mushafHTMode) {
             mushafClozeMode = 'heads';
             document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
-            mushafRevealHeads();
+            applyHTReveal();
+        } else {
+            // all off → plain cloze
+            mushafClozeMode = 'cloze';
+            document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
         }
         updateModeBtns();
         applyMushafReveal();
+    }
+
+    // آيَة ↔ صَفْحَة center toggle: آيَة = head/tail of ONE ayah only (the
+    // active/first covered), صَفْحَة = head/tail of ALL verses on the page.
+    function mushafToggleScope() {
+        mushafScope = mushafScope === 'one' ? 'all' : 'one';
+        if (mushafHTMode) {
+            const page = document.getElementById('mushaf-page');
+            if (page) {
+                clearAllCoverClips();
+                applyHTReveal();
+            }
+        }
+        updateModeBtns();
+    }
+
+    // Apply the active head/tail reveal over the current cloze. Scope 'one'
+    // (آيَة) reveals the chosen 1/6 of ONLY the first covered ayah; scope
+    // 'all' (صَفْحَة) reveals every covered ayah.
+    function applyHTReveal() {
+        const page = document.getElementById('mushaf-page');
+        if (!page || !mushafHTMode) return;
+        // unique covered ayah keys in reading order
+        const keys = [];
+        page.querySelectorAll('.mf-verse.covered').forEach(el => {
+            const k = el.dataset.vkey;
+            if (k && !keys.includes(k)) keys.push(k);
+        });
+        if (!keys.length) return;
+        const targets = mushafScope === 'one' ? [keys[0]] : keys;
+        // line width for the 1/6 target (plain uses frame-mid, classic uses page box)
+        const mid = page.querySelector('.mf-frame-mid') || page.querySelector('.mf-classic');
+        const lineW = mid ? mid.getBoundingClientRect().width : 300;
+        const target = lineW / 6; // ~ one sixth of a line (verse header/tail)
+        targets.forEach(k => {
+            const frags = [...page.querySelectorAll(`.mf-verse[data-vkey="${k}"]`)];
+            if (!frags.length) return;
+            if (mushafHTMode === 'head' || mushafHTMode === 'both') {
+                revealFragmentHead(frags, target);
+            }
+            if (mushafHTMode === 'tail' || mushafHTMode === 'both') {
+                revealFragmentTail(frags, target);
+            }
+        });
+    }
+
+    // Reveal the start (~target px) of the ayah: first fragment from its
+    // right (RTL start); if the verse begins at the very end of a line, spill
+    // a little into the next line's right side so ~1/6 of a line shows.
+    function revealFragmentHead(frags, target) {
+        const first = frags[0];
+        const firstCover = first.querySelector('.mf-cover');
+        if (!firstCover) return;
+        const firstW = first.getBoundingClientRect().width;
+        if (firstW <= target) {
+            firstCover.style.clipPath = 'inset(0 100% 0 0)';
+            const next = frags[1];
+            if (next) {
+                const c2 = next.querySelector('.mf-cover');
+                const w2 = next.getBoundingClientRect().width;
+                if (c2 && w2 > 0) {
+                    const frac = Math.min(1, (target - firstW) / w2);
+                    c2.style.clipPath = `inset(0 ${Math.max(1, Math.round(frac * 100))}% 0 0)`;
+                }
+            }
+        } else {
+            const frac = target / firstW;
+            firstCover.style.clipPath = `inset(0 ${Math.max(1, Math.round(frac * 100))}% 0 0)`;
+        }
+    }
+
+    // Reveal the END (~target px) of the ayah: last fragment from its left
+    // (RTL end); if the verse ends at the very start of a line, spill a little
+    // into the previous line's left side so ~1/6 of a line shows.
+    function revealFragmentTail(frags, target) {
+        const last = frags[frags.length - 1];
+        const lastCover = last.querySelector('.mf-cover');
+        if (!lastCover) return;
+        const lastW = last.getBoundingClientRect().width;
+        if (lastW <= target) {
+            lastCover.style.clipPath = 'inset(0 0 0 100%)';
+            const prev = frags[frags.length - 2];
+            if (prev) {
+                const c2 = prev.querySelector('.mf-cover');
+                const w2 = prev.getBoundingClientRect().width;
+                if (c2 && w2 > 0) {
+                    const frac = Math.min(1, (target - lastW) / w2);
+                    c2.style.clipPath = `inset(0 0 0 ${Math.max(1, Math.round(frac * 100))}%)`;
+                }
+            }
+        } else {
+            const frac = target / lastW;
+            lastCover.style.clipPath = `inset(0 0 0 ${Math.max(1, Math.round(frac * 100))}%)`;
+        }
     }
 
     // Remove every clip-path (1/6 headers AND slider reveals) so a mode
@@ -2234,17 +2450,23 @@
 
     function updateModeBtns() {
         const toggle = document.getElementById('mushaf-toggle-all');
-        const heads = document.getElementById('mushaf-heads-btn');
+        const ht = document.getElementById('mushaf-ht');
         if (toggle) {
             // label mirrors the NEXT action
             toggle.textContent = mushafClozeMode === 'all' ? '🔒 Cloze All' : '👁 Reveal All';
             toggle.classList.toggle('active', mushafClozeMode !== 'all');
         }
-        if (heads) {
-            // 1/6 appears only while cloze is on; active when in heads mode
-            const clozeOn = mushafClozeMode !== 'all';
-            heads.style.display = clozeOn ? '' : 'none';
-            heads.classList.toggle('active', mushafClozeMode === 'heads');
+        if (ht) ht.style.display = mushafClozeMode !== 'all' ? '' : 'none';
+        const head = document.getElementById('mushaf-head-btn');
+        const tail = document.getElementById('mushaf-tail-btn');
+        if (head) head.classList.toggle('active', mushafHTMode === 'head' || mushafHTMode === 'both');
+        if (tail) tail.classList.toggle('active', mushafHTMode === 'tail' || mushafHTMode === 'both');
+        const scope = document.getElementById('mushaf-scope-btn');
+        if (scope) {
+            // آيَة = one ayah, صَفْحَة = whole page (all verses); highlight when page
+            scope.textContent = mushafScope === 'one' ? 'آيَة' : 'صَفْحَة';
+            scope.classList.toggle('active', mushafScope === 'all');
+            scope.title = mushafScope === 'one' ? 'آيَة — one ayah only. Tap for صَفْحَة (whole page)' : 'صَفْحَة — whole page. Tap for آيَة (one ayah)';
         }
     }
 
@@ -2375,6 +2597,12 @@
                 updateModeBtns();
             }
         }
+        // re-apply the armed head/tail setting to the NEW active ayah
+        // (آيَة scope: the next first-covered verse gets its head/tail)
+        if (mushafHTMode) {
+            clearAllCoverClips();
+            applyHTReveal();
+        }
         updateModeBtns();
         applyMushafReveal();
     }
@@ -2432,56 +2660,6 @@
     // the verse — about a sixth of a line — so the ayah number/first word is
     // visible as a memory cue. If the verse begins at the very end of a line,
     // spill a little into the next line's right side so ~1/6 of a line shows.
-    function mushafRevealHeads() {
-        const page = document.getElementById('mushaf-page');
-        if (!page) return;
-        // release slider-managed covers first
-        if (mushafSliderKey) {
-            page.querySelectorAll(`.mf-verse[data-vkey="${mushafSliderKey}"] .mf-cover`).forEach(c => { c.style.clipPath = ''; });
-            mushafSliderKey = null;
-        }
-        // unique covered ayah keys, in reading order
-        const keys = [];
-        page.querySelectorAll('.mf-verse.covered').forEach(el => {
-            const k = el.dataset.vkey;
-            if (k && !keys.includes(k)) keys.push(k);
-        });
-        // line width for the 1/6 target (plain uses frame-mid, classic uses page box)
-        const mid = page.querySelector('.mf-frame-mid') || page.querySelector('.mf-classic');
-        const lineW = mid ? mid.getBoundingClientRect().width : 300;
-        const target = lineW / 6; // ~ one sixth of a line (verse header)
-        keys.forEach(k => {
-            const frags = [...page.querySelectorAll(`.mf-verse[data-vkey="${k}"]`)];
-            if (!frags.length) return;
-            // reset all covers of this ayah first
-            frags.forEach(f => {
-                const c = f.querySelector('.mf-cover');
-                if (c) c.style.clipPath = '';
-            });
-            const first = frags[0];
-            const firstCover = first.querySelector('.mf-cover');
-            if (!firstCover) return;
-            const firstW = first.getBoundingClientRect().width;
-            if (firstW <= target) {
-                // verse starts near the line end: reveal the whole first
-                // fragment + a bit of the next line's right side
-                firstCover.style.clipPath = 'inset(0 100% 0 0)';
-                const next = frags[1];
-                if (next) {
-                    const c2 = next.querySelector('.mf-cover');
-                    const w2 = next.getBoundingClientRect().width;
-                    if (c2 && w2 > 0) {
-                        const frac = Math.min(1, (target - firstW) / w2);
-                        c2.style.clipPath = `inset(0 ${Math.max(1, Math.round(frac * 100))}% 0 0)`;
-                    }
-                }
-            } else {
-                const frac = target / firstW;
-                firstCover.style.clipPath = `inset(0 ${Math.max(1, Math.round(frac * 100))}% 0 0)`;
-            }
-        });
-    }
-
     function toggleMushaf() {
         const panel = document.getElementById('mushaf-panel');
         const btn = document.getElementById('mushaf-toggle-btn');
@@ -2592,6 +2770,7 @@
                         // if the whole page is now revealed, switch mode to 'all'
                         if (!page.querySelector('.mf-verse.covered')) {
                             mushafClozeMode = 'all';
+                            mushafHTMode = null;
                             updateModeBtns();
                         }
                     }
