@@ -432,8 +432,10 @@
             background: #F4EFE2;
             border-bottom: 1px solid #E8E0CC;
             flex-shrink: 0;
+            overflow-x: auto;      /* never let buttons push off-screen */
+            -webkit-overflow-scrolling: touch;
         }
-        /* 3-mode study control: Cloze All / Verse Header / Reveal All —
+        /* Study controls: Cloze All ↔ Reveal All toggle + conditional 1/6 —
            segmented group, only one active at a time */
         .mushaf-mode-group {
             display: flex;
@@ -479,8 +481,8 @@
             white-space: nowrap;
         }
         .mushaf-page-input {
-            width: 56px;
-            padding: 5px 8px;
+            width: 48px;
+            padding: 4px 6px;
             border: 1px solid #CBBFA0;
             border-radius: 8px;
             background: #FFFFFF;
@@ -489,6 +491,7 @@
             font-weight: 700;
             text-align: center;
             touch-action: manipulation;
+            min-width: 0;
         }
         .mushaf-go {
             border: none;
@@ -1225,9 +1228,8 @@
                 <button type="button" class="mushaf-go" id="mushaf-go-btn">Go</button>
             </label>
             <div class="mushaf-mode-group" id="mushaf-mode-group">
-                <button type="button" class="mushaf-mode-btn" data-mode="cloze" onclick="mushafSetMode('cloze')">🔒 Cloze All</button>
-                <button type="button" class="mushaf-mode-btn" data-mode="heads" onclick="mushafSetMode('heads')">👁 Verse Header</button>
-                <button type="button" class="mushaf-mode-btn" data-mode="all" onclick="mushafSetMode('all')">👁 Reveal All</button>
+                <button type="button" class="mushaf-mode-btn" id="mushaf-toggle-all" onclick="mushafToggleAll()">🔒 Cloze All</button>
+                <button type="button" class="mushaf-mode-btn" id="mushaf-heads-btn" onclick="mushafSetMode('heads')" style="display:none">1/6</button>
             </div>
         </div>
         <div class="mushaf-float-body" id="mushaf-page"></div>
@@ -2179,30 +2181,59 @@
         applyMushafReveal();
     }
 
-    // 3-mode study control: 'cloze' (all covered) | 'heads' (verse headers,
-    // ~1/6 of a line) | 'all' (revealed). Only one button is active at a time.
-    function mushafSetMode(mode) {
-        mushafClozeMode = mode;
-        mushafRevealPct = 0; // mode button clicked → slider resets to default
+    // Study controls: a single toggle alternates Cloze All ↔ Reveal All.
+    // The 1/6 (verse header) button appears ONLY while in cloze mode.
+    function mushafToggleAll() {
         const page = document.getElementById('mushaf-page');
         if (!page) return;
-        if (mode === 'cloze') {
+        mushafRevealPct = 0; // button clicked → slider resets to default
+        if (mushafClozeMode === 'all') {
+            // → cloze all
+            mushafClozeMode = 'cloze';
             document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
-        } else if (mode === 'heads') {
-            // verse-header mode: cloze everything, then reveal each ayah start
+        } else {
+            // cloze/heads → reveal all
+            mushafClozeMode = 'all';
+            document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.remove('covered'));
+            if (mushafSliderKey) {
+                page.querySelectorAll(`.mf-verse[data-vkey="${mushafSliderKey}"] .mf-cover`).forEach(c => { c.style.clipPath = ''; });
+                mushafSliderKey = null;
+            }
+        }
+        updateModeBtns();
+        applyMushafReveal();
+    }
+
+    // 1/6 (verse header): cloze everything, then reveal each ayah start.
+    // Only reachable while in cloze mode.
+    function mushafSetMode(mode) {
+        if (mode === 'heads' && mushafClozeMode === 'all') return; // not in cloze mode
+        mushafClozeMode = mode;
+        mushafRevealPct = 0;
+        const page = document.getElementById('mushaf-page');
+        if (!page) return;
+        if (mode === 'heads') {
             document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.add('covered'));
             mushafRevealHeads();
-        } else {
-            document.querySelectorAll('#mushaf-page .mf-verse').forEach(el => el.classList.remove('covered'));
         }
         updateModeBtns();
         applyMushafReveal();
     }
 
     function updateModeBtns() {
-        document.querySelectorAll('.mushaf-mode-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.mode === mushafClozeMode);
-        });
+        const toggle = document.getElementById('mushaf-toggle-all');
+        const heads = document.getElementById('mushaf-heads-btn');
+        if (toggle) {
+            // label mirrors the NEXT action
+            toggle.textContent = mushafClozeMode === 'all' ? '🔒 Cloze All' : '👁 Reveal All';
+            toggle.classList.toggle('active', mushafClozeMode !== 'all');
+        }
+        if (heads) {
+            // 1/6 appears only while cloze is on; active when in heads mode
+            const clozeOn = mushafClozeMode !== 'all';
+            heads.style.display = clozeOn ? '' : 'none';
+            heads.classList.toggle('active', mushafClozeMode === 'heads');
+        }
     }
 
     function mushafGoToPage() {
@@ -2522,11 +2553,17 @@
             // still-covered verse) bit by bit. Reaching the left end (100%)
             // fully reveals it; on finger lift it auto-restarts to the right
             // side so the NEXT ayah begins revealing — a slow continuous study.
+            // The input event fires at display rate; coalesce the reveal pass
+            // into one rAF per frame so rapid dragging never freezes the UI.
+            let sliderRaf = null;
             pageEl.addEventListener('input', e => {
-                if (e.target.classList.contains('mf-reveal-slider')) {
-                    mushafRevealPct = parseInt(e.target.value, 10) || 0;
+                if (!e.target.classList.contains('mf-reveal-slider')) return;
+                mushafRevealPct = parseInt(e.target.value, 10) || 0;
+                if (sliderRaf) return;
+                sliderRaf = requestAnimationFrame(() => {
+                    sliderRaf = null;
                     applyMushafReveal();
-                }
+                });
             });
             pageEl.addEventListener('change', e => {
                 if (!e.target.classList.contains('mf-reveal-slider')) return;
