@@ -1215,7 +1215,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 9999;
+            z-index: 99999; /* above the mushaf overlay (z 10000) */
             opacity: 0;
             pointer-events: none;
             transition: opacity .2s ease;
@@ -1372,17 +1372,6 @@
         <div style="height: 10px;"></div>
     </div>
 
-    <div class="section-header">PLAY SET OF VERSES</div>
-    <div class="section-panel">
-        <div class="segmented-control" id="set-verses-repeat">
-            <button class="seg-option selected" data-val="1" onclick="selectSegmented(this)">1 time</button>
-            <button class="seg-option" data-val="2" onclick="selectSegmented(this)">2 times</button>
-            <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
-            <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
-        </div>
-        <div style="height: 10px;"></div>
-    </div>
-
     <div class="section-header">PLAY EACH PAGE</div>
     <div class="section-panel">
         <div class="segmented-control" id="each-page-repeat">
@@ -1397,6 +1386,17 @@
     <div class="section-header">PLAY EACH MAQRA'</div>
     <div class="section-panel">
         <div class="segmented-control" id="each-maqra-repeat">
+            <button class="seg-option selected" data-val="1" onclick="selectSegmented(this)">1 time</button>
+            <button class="seg-option" data-val="2" onclick="selectSegmented(this)">2 times</button>
+            <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
+            <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
+        </div>
+        <div style="height: 10px;"></div>
+    </div>
+
+    <div class="section-header">PLAY SELECTED</div>
+    <div class="section-panel">
+        <div class="segmented-control" id="set-verses-repeat">
             <button class="seg-option selected" data-val="1" onclick="selectSegmented(this)">1 time</button>
             <button class="seg-option" data-val="2" onclick="selectSegmented(this)">2 times</button>
             <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
@@ -1483,7 +1483,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v50';
+    const APP_VERSION = 'v51';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2488,19 +2488,65 @@
         updateModeBtns();
     }
 
-    // Keyboard shortcut ,/. — step the reveal slider forward/backward by 6%.
-    // At the right end (100%) it behaves like a finger lift: the active ayah
+    // Keyboard shortcut ,/. — step the reveal slider forward/backward.
+    // Default step is 6% of the active ayah. BUT if the active ayah is
+    // confined to a single line that also holds several other ayahs (3-4
+    // short ayahs per line), one hit covers/reveals ~1/3 of it (33%) so a
+    // short verse completes in ~3 hits instead of 17.
+    // At the left end (100%) it behaves like a finger lift: the active ayah
     // is committed as revealed and the slider snaps back to reveal the next.
+    // At the right end (0%) going back, the PREVIOUS ayah is re-clozed and the
+    // slider snaps to the left — continuous reverse study.
     function mushafSliderStep(dir) {
         const page = document.getElementById('mushaf-page');
         if (!page) return;
-        mushafRevealPct = Math.max(0, Math.min(100, (mushafRevealPct || 0) + dir * 6));
+
+        // step size: 33% for single-line ayahs packed 3-4 per line, else 6%
+        let step = 6;
+        const covered = [...page.querySelectorAll('.mf-verse.covered')];
+        if (covered.length) {
+            const ak = covered[0].dataset.vkey;
+            const frags = [...page.querySelectorAll(`.mf-verse[data-vkey="${ak}"]`)];
+            const mid = page.querySelector('.mf-frame-mid') || page.querySelector('.mf-classic');
+            const lineW = mid ? mid.getBoundingClientRect().width : 300;
+            const totalW = frags.reduce((s, f) => s + Math.max(1, f.getBoundingClientRect().width), 0);
+            // single line + much shorter than the line → packed line → 33%
+            if (frags.length === 1 && totalW <= lineW * 0.45) step = 33;
+        }
+
+        let pct = (mushafRevealPct || 0) + dir * step;
+        if (dir < 0 && pct <= 0 && mushafRevealPct <= 0) {
+            // at the very start (fully covered): go back to the previous ayah —
+            // re-cloze it and snap to the left end, then step from there
+            const keys = [];
+            page.querySelectorAll('.mf-verse').forEach(el => {
+                const k = el.dataset.vkey;
+                if (k && !keys.includes(k)) keys.push(k);
+            });
+            const activeKey = covered.length ? covered[0].dataset.vkey : null;
+            const ai = keys.indexOf(activeKey);
+            const prevKey = ai > 0 ? keys[ai - 1] : null;
+            if (prevKey) {
+                page.querySelectorAll(`.mf-verse[data-vkey="${prevKey}"]`).forEach(v => v.classList.add('covered'));
+                mushafSliderKey = null;
+                mushafClozeMode = 'cloze';
+                updateModeBtns();
+                mushafRevealPct = 100;
+                applyMushafReveal();
+                // one more step from the left end
+                mushafRevealPct = Math.max(0, Math.min(100, 100 - step));
+                applyMushafReveal();
+                return;
+            }
+        }
+
+        mushafRevealPct = Math.max(0, Math.min(100, pct));
         applyMushafReveal();
         if (mushafRevealPct >= 100) {
             // mirror the slider 'change' (finger-lift) auto-restart
-            const covered = [...page.querySelectorAll('.mf-verse.covered')];
-            if (covered.length) {
-                const ak = covered[0].dataset.vkey;
+            const cov = [...page.querySelectorAll('.mf-verse.covered')];
+            if (cov.length) {
+                const ak = cov[0].dataset.vkey;
                 page.querySelectorAll(`.mf-verse[data-vkey="${ak}"]`).forEach(v => v.classList.remove('covered'));
                 mushafSliderKey = null;
                 if (!page.querySelector('.mf-verse.covered')) {
