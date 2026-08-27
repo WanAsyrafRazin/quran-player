@@ -1483,7 +1483,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v51';
+    const APP_VERSION = 'v52';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2515,15 +2515,21 @@
         }
 
         let pct = (mushafRevealPct || 0) + dir * step;
+        // page-boundary guard: the first ayah never reverse-wraps, the last
+        // ayah never forward-wraps — the slider simply stays at its end.
+        const keys = [];
+        page.querySelectorAll('.mf-verse').forEach(el => {
+            const k = el.dataset.vkey;
+            if (k && !keys.includes(k)) keys.push(k);
+        });
+        const activeKey = covered.length ? covered[0].dataset.vkey : null;
+        const isFirstAyah = activeKey ? keys[0] === activeKey : false;
+        const isLastAyah = activeKey ? keys[keys.length - 1] === activeKey : false;
         if (dir < 0 && pct <= 0 && mushafRevealPct <= 0) {
             // at the very start (fully covered): go back to the previous ayah —
-            // re-cloze it and snap to the left end, then step from there
-            const keys = [];
-            page.querySelectorAll('.mf-verse').forEach(el => {
-                const k = el.dataset.vkey;
-                if (k && !keys.includes(k)) keys.push(k);
-            });
-            const activeKey = covered.length ? covered[0].dataset.vkey : null;
+            // re-cloze it and snap to the left end, then step from there.
+            // The FIRST ayah of the page does not wrap.
+            if (isFirstAyah) return;
             const ai = keys.indexOf(activeKey);
             const prevKey = ai > 0 ? keys[ai - 1] : null;
             if (prevKey) {
@@ -2543,7 +2549,8 @@
         mushafRevealPct = Math.max(0, Math.min(100, pct));
         applyMushafReveal();
         if (mushafRevealPct >= 100) {
-            // mirror the slider 'change' (finger-lift) auto-restart
+            // mirror the slider 'change' (finger-lift) auto-restart — except the
+            // last ayah of the page stays revealed at the left end (no wrap)
             const cov = [...page.querySelectorAll('.mf-verse.covered')];
             if (cov.length) {
                 const ak = cov[0].dataset.vkey;
@@ -2555,8 +2562,13 @@
                     updateModeBtns();
                 }
             }
-            mushafRevealPct = 0;
-            applyMushafReveal();
+            if (!isLastAyah) {
+                mushafRevealPct = 0;
+                applyMushafReveal();
+            } else {
+                // hold at the fully-revealed left end
+                applyMushafReveal();
+            }
         }
     }
 
@@ -2965,13 +2977,21 @@
             pageEl.addEventListener('change', e => {
                 if (!e.target.classList.contains('mf-reveal-slider')) return;
                 const page = document.getElementById('mushaf-page');
+                const covered = [...page.querySelectorAll('.mf-verse.covered')];
+                const ak = covered.length ? covered[0].dataset.vkey : null;
+                const keys = [];
+                page.querySelectorAll('.mf-verse').forEach(el => {
+                    const k = el.dataset.vkey;
+                    if (k && !keys.includes(k)) keys.push(k);
+                });
+                const isLastAyah = ak ? keys[keys.length - 1] === ak : false;
+                const isFirstAyah = ak ? keys[0] === ak : false;
                 // finger lifted at the LEFT end: the active ayah was fully
                 // revealed → commit it (remove cover) and snap to the right (0)
-                // so the next ayah becomes active.
+                // so the next ayah becomes active — EXCEPT for the last ayah of
+                // the page, which stays revealed at the left end (no wrap).
                 if (mushafRevealPct >= 100) {
-                    const covered = [...page.querySelectorAll('.mf-verse.covered')];
-                    if (covered.length) {
-                        const ak = covered[0].dataset.vkey;
+                    if (ak) {
                         page.querySelectorAll(`.mf-verse[data-vkey="${ak}"]`).forEach(v => v.classList.remove('covered'));
                         mushafSliderKey = null;
                         // if the whole page is now revealed, switch mode to 'all'
@@ -2981,17 +3001,21 @@
                             updateModeBtns();
                         }
                     }
-                    mushafRevealPct = 0;
-                    applyMushafReveal();
+                    if (!isLastAyah) {
+                        mushafRevealPct = 0;
+                        applyMushafReveal();
+                    } else {
+                        // last ayah: hold at the fully-revealed left end
+                        applyMushafReveal();
+                    }
                 }
                 // finger lifted at the RIGHT end (0 = fully covered): re-cloze
                 // the PREVIOUS ayah (the last one we advanced past) and snap to
                 // the left (100) — the reverse wrap, for going back through the
-                // page while studying.
+                // page while studying. The FIRST ayah of the page does not wrap.
                 else if (mushafRevealPct <= 0) {
-                    const covered = [...page.querySelectorAll('.mf-verse.covered')];
+                    if (isFirstAyah) return; // first ayah: no reverse wrap
                     if (covered.length) {
-                        const ak = covered[0].dataset.vkey;
                         // find the ayah immediately BEFORE the active one in
                         // reading order (the previous revealed verse)
                         const all = [...page.querySelectorAll('.mf-verse')];
