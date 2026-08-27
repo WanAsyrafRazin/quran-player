@@ -1206,6 +1206,93 @@
         body.dark-mode .speed-row { background: #111720; }
         body.dark-mode #speed-slider { accent-color: #7FB3C9; }
         body.dark-mode .speed-labels { color: #718096; }
+
+        /* Help / hotkeys modal */
+        .help-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 32, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s ease;
+            padding: 16px;
+        }
+        .help-overlay.visible { opacity: 1; pointer-events: auto; }
+        .help-modal {
+            width: 100%;
+            max-width: 380px;
+            max-height: 85vh;
+            overflow-y: auto;
+            background: #FDFBF4;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+            transform: translateY(8px);
+            transition: transform .2s ease;
+            -webkit-overflow-scrolling: touch;
+        }
+        .help-overlay.visible .help-modal { transform: translateY(0); }
+        body.dark-mode .help-modal { background: #1A232E; }
+        .help-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #5C4013;
+            border-bottom: 1px solid #E8E0CC;
+            position: sticky;
+            top: 0;
+            background: inherit;
+        }
+        body.dark-mode .help-head { color: #E8D5A0; border-color: #2D3748; }
+        .help-close {
+            border: none;
+            background: #E8E0CC;
+            color: #5C4013;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        body.dark-mode .help-close { background: #2D3748; color: #E8D5A0; }
+        .help-body { padding: 8px 16px 16px; }
+        .help-section { margin-top: 12px; }
+        .help-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #A9803B;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            margin-bottom: 6px;
+        }
+        body.dark-mode .help-title { color: #D9B877; }
+        .help-row {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            padding: 4px 0;
+            font-size: 13px;
+            color: #3A3A3A;
+        }
+        body.dark-mode .help-row { color: #E2E8F0; }
+        .help-row code {
+            flex-shrink: 0;
+            background: #F1EFE6;
+            border: 1px solid #E0D8C4;
+            border-radius: 6px;
+            padding: 2px 7px;
+            font-size: 12px;
+            color: #5C4013;
+            font-weight: 600;
+        }
+        body.dark-mode .help-row code { background: #141B24; border-color: #2D3748; color: #E8D5A0; }
+        .help-row span { line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -1214,6 +1301,7 @@
     <!-- Top Bar: version badge (left) + Theme Toggle (right) -->
     <div class="top-bar">
         <span class="version-badge" id="version-badge">…</span>
+        <button class="theme-toggle" id="home-help-btn" onclick="openHelp()" aria-label="Help and hotkeys" title="Help &amp; hotkeys" style="width:34px;height:34px;font-size:16px;">❓</button>
         <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌙</button>
     </div>
 
@@ -1295,6 +1383,28 @@
         <div style="height: 10px;"></div>
     </div>
 
+    <div class="section-header">PLAY EACH PAGE</div>
+    <div class="section-panel">
+        <div class="segmented-control" id="each-page-repeat">
+            <button class="seg-option selected" data-val="1" onclick="selectSegmented(this)">1 time</button>
+            <button class="seg-option" data-val="2" onclick="selectSegmented(this)">2 times</button>
+            <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
+            <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
+        </div>
+        <div style="height: 10px;"></div>
+    </div>
+
+    <div class="section-header">PLAY EACH MAQRA'</div>
+    <div class="section-panel">
+        <div class="segmented-control" id="each-maqra-repeat">
+            <button class="seg-option selected" data-val="1" onclick="selectSegmented(this)">1 time</button>
+            <button class="seg-option" data-val="2" onclick="selectSegmented(this)">2 times</button>
+            <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
+            <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
+        </div>
+        <div style="height: 10px;"></div>
+    </div>
+
     <div class="section-header">RECITATION VERSION</div>
     <div class="section-panel">
         <div class="segmented-control" id="recitation-selector">
@@ -1320,6 +1430,7 @@
                 <input type="number" id="mushaf-page-input" class="mushaf-page-input" min="1" max="604" inputmode="numeric" aria-label="Page number">
                 <button type="button" class="mushaf-go" id="mushaf-go-btn">Go</button>
             </label>
+            <button type="button" class="mushaf-go" id="mushaf-help-btn" onclick="openHelp()" title="Help &amp; hotkeys" aria-label="Help and hotkeys">❓</button>
             <div class="mushaf-mode-group" id="mushaf-mode-group">
                 <button type="button" class="mushaf-mode-btn" id="mushaf-toggle-all" onclick="mushafToggleAll()">🔒 Cloze All</button>
                 <div class="mushaf-ht" id="mushaf-ht" style="display:none">
@@ -1372,7 +1483,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v49';
+    const APP_VERSION = 'v50';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -1430,6 +1541,8 @@
     let currentAyahIndex = 0;
     let currentAyahRepeatCount = 1;
     let currentRangeRepeatCount = 1;
+    let currentPageRepeatCount = 1;
+    let currentMaqraRepeatCount = 1;
 
     // Load initial structure AND our local timestamp file on page load
     async function loadQuranData() {
@@ -2671,27 +2784,35 @@
         }
         if (!activeKey || pct <= 0) return;
 
-        // 3. fragments of the active ayah in reading order (top line first)
+        // 3. fragments of the active ayah in reading order (top line first).
+        //    Weight each fragment by its ACTUAL width, not by count — an ayah
+        //    that fills 1/3 of line 1, the whole of line 2, and 1/2 of line 3
+        //    reveals proportionally to those widths (1/3 + 1 + 1/2 = 11/6), so
+        //    50% of the slider reveals 5.5/6 of a line, exactly where the text
+        //    really is.
         const frags = [...page.querySelectorAll(`.mf-verse[data-vkey="${activeKey}"]`)];
         const n = frags.length;
         if (!n) return;
-        // total = fraction of the whole ayah revealed (0..n); full fragments
-        // first, then a partial reveal of the next fragment.
-        const total = (pct / 100) * n;
-        const full = Math.floor(total);
-        const partial = total - full; // 0..1 within the current fragment
+        const widths = frags.map(f => Math.max(1, f.getBoundingClientRect().width));
+        const totalW = widths.reduce((a, b) => a + b, 0);
+        const targetW = (pct / 100) * totalW; // revealed width budget
 
+        let acc = 0;
         frags.forEach((v, i) => {
             const cover = v.querySelector('.mf-cover');
             if (!cover) return;
-            if (i < full) {
-                cover.style.clipPath = 'inset(0 100% 0 0)'; // fully revealed
-            } else if (i === full) {
-                // RTL: clip from the right so the ayah start shows first
-                cover.style.clipPath = `inset(0 ${Math.max(1, Math.round(partial * 100))}% 0 0)`;
+            const w = widths[i];
+            if (acc + w <= targetW + 0.5) {
+                // this fragment is fully within the reveal budget
+                cover.style.clipPath = 'inset(0 100% 0 0)';
+            } else if (acc < targetW) {
+                // partial: only the first (targetW - acc) px of this fragment
+                const frac = (targetW - acc) / w;
+                cover.style.clipPath = `inset(0 ${Math.max(1, Math.min(100, Math.round(frac * 100)))}% 0 0)`;
             } else {
                 cover.style.clipPath = ''; // still covered
             }
+            acc += w;
         });
         mushafSliderKey = activeKey;
     }
@@ -2797,11 +2918,11 @@
             });
             pageEl.addEventListener('change', e => {
                 if (!e.target.classList.contains('mf-reveal-slider')) return;
-                // finger lifted: if the active ayah was fully revealed, reveal
-                // it for real and snap the slider back to the right (0) so the
-                // next ayah is the new active one
+                const page = document.getElementById('mushaf-page');
+                // finger lifted at the LEFT end: the active ayah was fully
+                // revealed → commit it (remove cover) and snap to the right (0)
+                // so the next ayah becomes active.
                 if (mushafRevealPct >= 100) {
-                    const page = document.getElementById('mushaf-page');
                     const covered = [...page.querySelectorAll('.mf-verse.covered')];
                     if (covered.length) {
                         const ak = covered[0].dataset.vkey;
@@ -2815,6 +2936,40 @@
                         }
                     }
                     mushafRevealPct = 0;
+                    applyMushafReveal();
+                }
+                // finger lifted at the RIGHT end (0 = fully covered): re-cloze
+                // the PREVIOUS ayah (the last one we advanced past) and snap to
+                // the left (100) — the reverse wrap, for going back through the
+                // page while studying.
+                else if (mushafRevealPct <= 0) {
+                    const covered = [...page.querySelectorAll('.mf-verse.covered')];
+                    if (covered.length) {
+                        const ak = covered[0].dataset.vkey;
+                        // find the ayah immediately BEFORE the active one in
+                        // reading order (the previous revealed verse)
+                        const all = [...page.querySelectorAll('.mf-verse')];
+                        let prevKey = null;
+                        for (let i = 0; i < all.length; i++) {
+                            if (all[i].dataset.vkey === ak) {
+                                // scan backwards for the first verse with a different key
+                                for (let j = i - 1; j >= 0; j--) {
+                                    const pk = all[j].dataset.vkey;
+                                    if (pk && pk !== ak) { prevKey = pk; break; }
+                                }
+                                break;
+                            }
+                        }
+                        if (prevKey) {
+                            // re-cloze the previous ayah (it becomes active again)
+                            page.querySelectorAll(`.mf-verse[data-vkey="${prevKey}"]`).forEach(v => v.classList.add('covered'));
+                            mushafSliderKey = null;
+                            mushafClozeMode = 'cloze';
+                            updateModeBtns();
+                        }
+                    }
+                    // snap to the left end so the previous ayah can be studied again
+                    mushafRevealPct = 100;
                     applyMushafReveal();
                 }
             });
@@ -3186,6 +3341,8 @@
         currentAyahIndex = 0;
         currentAyahRepeatCount = 1;
         currentRangeRepeatCount = 1;
+        currentPageRepeatCount = 1;
+        currentMaqraRepeatCount = 1;
 
         isPlaying = true;
         isPaused = false;
@@ -3449,6 +3606,8 @@
     function handleVerseEnd() {
         const ayahRepeatVal = document.querySelector('#each-verse-repeat .selected').getAttribute('data-val');
         const setRepeatVal = document.querySelector('#set-verses-repeat .selected').getAttribute('data-val');
+        const pageRepeatVal = document.querySelector('#each-page-repeat .selected').getAttribute('data-val');
+        const maqraRepeatVal = document.querySelector('#each-maqra-repeat .selected').getAttribute('data-val');
 
         if (ayahRepeatVal === 'loop' || currentAyahRepeatCount < parseInt(ayahRepeatVal)) {
             if (ayahRepeatVal !== 'loop') currentAyahRepeatCount++;
@@ -3457,7 +3616,49 @@
         }
 
         currentAyahRepeatCount = 1;
+        const finishedV = playlist[currentAyahIndex]; // the verse we just completed
         currentAyahIndex++;
+
+        // --- page repeat: replay the just-completed page before moving on ---
+        // (counter persists while inside a page; only resets when we actually
+        // cross a page boundary and move past it)
+        {
+            const nextV = playlist[currentAyahIndex];
+            const crossedPage = nextV && finishedV && nextV.page !== finishedV.page;
+            const endedPage = !nextV && finishedV; // finished the last verse of the playlist
+            if (crossedPage || endedPage) {
+                if (pageRepeatVal === 'loop' || currentPageRepeatCount < parseInt(pageRepeatVal)) {
+                    if (pageRepeatVal !== 'loop') currentPageRepeatCount++;
+                    // rewind to the first verse of the page we just finished
+                    const targetPage = finishedV.page;
+                    while (currentAyahIndex > 0 && playlist[currentAyahIndex - 1].page === targetPage) {
+                        currentAyahIndex--;
+                    }
+                    playCurrentVerse();
+                    return;
+                }
+                currentPageRepeatCount = 1; // page exhausted → move on
+            }
+        }
+
+        // --- maqra' repeat: same, per maqra' ---
+        {
+            const nextV = playlist[currentAyahIndex];
+            const crossedMaqra = nextV && finishedV && nextV.maqra !== finishedV.maqra;
+            const endedMaqra = !nextV && finishedV;
+            if (crossedMaqra || endedMaqra) {
+                if (maqraRepeatVal === 'loop' || currentMaqraRepeatCount < parseInt(maqraRepeatVal)) {
+                    if (maqraRepeatVal !== 'loop') currentMaqraRepeatCount++;
+                    const targetMaqra = finishedV.maqra;
+                    while (currentAyahIndex > 0 && playlist[currentAyahIndex - 1].maqra === targetMaqra) {
+                        currentAyahIndex--;
+                    }
+                    playCurrentVerse();
+                    return;
+                }
+                currentMaqraRepeatCount = 1;
+            }
+        }
 
         if (currentAyahIndex >= playlist.length) {
             if (setRepeatVal === 'loop' || currentRangeRepeatCount < parseInt(setRepeatVal)) {
@@ -3751,6 +3952,56 @@
         btn.classList.toggle('selected', btn.dataset.file === recitationFile)
     );
     loadQuranData();
+</script>
+
+<!-- Help / hotkeys modal -->
+<div class="help-overlay" id="help-overlay" onclick="if (event.target === this) closeHelp()">
+    <div class="help-modal" role="dialog" aria-label="Help and hotkeys">
+        <div class="help-head">
+            <span>Help &amp; Hotkeys</span>
+            <button type="button" class="help-close" onclick="closeHelp()" aria-label="Close">✕</button>
+        </div>
+        <div class="help-body">
+            <div class="help-section"><div class="help-title">🎧 Player</div>
+                <div class="help-row"><code>Space</code><span>Play / pause</span></div>
+                <div class="help-row"><code>⏹</code><span>Stop (bottom bar)</span></div>
+                <div class="help-row"><code>1 / 2 / 3 / loop</code><span>Repeat each verse or whole set</span></div>
+            </div>
+            <div class="help-section"><div class="help-title">📖 Mushaf pages</div>
+                <div class="help-row"><code>◀ / ▶</code><span>Next / previous page</span></div>
+                <div class="help-row"><code>swipe ←/→</code><span>Next / previous page</span></div>
+                <div class="help-row"><code>page number + Go</code><span>Jump to any page (1–604)</span></div>
+            </div>
+            <div class="help-section"><div class="help-title">🧠 Study (cloze)</div>
+                <div class="help-row"><code>Space</code><span>Reveal next ayah (one by one)</span></div>
+                <div class="help-row"><code>▼ / ▲</code><span>Cloze verses from top / bottom</span></div>
+                <div class="help-row"><code>M</code><span>Cloze everything except the middle band</span></div>
+                <div class="help-row"><code>H</code><span>Reveal verse heads (first 1/6)</span></div>
+                <div class="help-row"><code>T</code><span>Reveal verse tails (last 1/6)</span></div>
+                <div class="help-row"><code>A / S</code><span>Scope: آيَة (one ayah) / صَفْحَة (whole page)</span></div>
+                <div class="help-row"><code>, / .</code><span>Reveal slider: advance / reverse</span></div>
+            </div>
+            <div class="help-section"><div class="help-title">🔘 Buttons</div>
+                <div class="help-row"><code>🔒 Cloze All ↔ 👁 Reveal All</code><span>Toggle all cloze on/off</span></div>
+                <div class="help-row"><code>رَأْس | آيَة | ذَيْل</code><span>Head · scope · tail reveal (tap again to toggle off)</span></div>
+                <div class="help-row"><code>slider</code><span>Reveal the active ayah bit by bit (auto-advances)</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    // Help modal: open from the home ❓ button or the mushaf ❓ button.
+    function openHelp() {
+        const o = document.getElementById('help-overlay');
+        if (o) o.classList.add('visible');
+    }
+    function closeHelp() {
+        const o = document.getElementById('help-overlay');
+        if (o) o.classList.remove('visible');
+    }
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeHelp();
+    });
 </script>
 
 </body>
