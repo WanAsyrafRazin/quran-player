@@ -1504,7 +1504,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v53';
+    const APP_VERSION = 'v54';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -3064,13 +3064,16 @@
                     applyMushafReveal();
                 }
             });
-            // Swipe right/left on the page → next/previous page (like flipping
+            // Swipe right/left on the PAGE → next/previous page (like flipping
             // a physical mushaf page: the next page advances toward the right).
+            // Only swipes that START on the page content itself turn the page —
+            // swipes on the reveal slider or the empty foot strip below it do
+            // not (so adjusting the slider or tapping the strip never flips).
             let swipeStart = null;
             let lastSwipeAt = 0;
             pageEl.addEventListener('touchstart', e => {
                 const t = e.touches[0];
-                swipeStart = { x: t.clientX, y: t.clientY, t: Date.now() };
+                swipeStart = { x: t.clientX, y: t.clientY, t: Date.now(), el: e.target };
             }, { passive: true });
             pageEl.addEventListener('touchend', e => {
                 if (!swipeStart) return;
@@ -3078,10 +3081,13 @@
                 const dx = t.clientX - swipeStart.x;
                 const dy = t.clientY - swipeStart.y;
                 const dt = Date.now() - swipeStart.t;
+                const startedOn = swipeStart.el;
                 swipeStart = null;
                 if (dt > 600) return;                       // too slow → a tap/long-press
                 if (Math.abs(dx) < 45) return;              // not horizontal enough
                 if (Math.abs(dx) < Math.abs(dy) * 1.2) return; // more vertical than horizontal
+                // ignore swipes starting on the slider, its row, or the foot strip
+                if (startedOn && startedOn.closest && startedOn.closest('.mf-reveal-slider, .mf-reveal-row, .mf-foot')) return;
                 lastSwipeAt = Date.now();
                 mushafGo(dx < 0 ? -1 : 1); // right swipe → next page, left swipe → previous
             }, { passive: true });
