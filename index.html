@@ -1372,7 +1372,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v48';
+    const APP_VERSION = 'v49';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2361,6 +2361,46 @@
         updateModeBtns();
     }
 
+    // Keyboard shortcut A/S: set the scope explicitly (A=آيَة one, S=صَفْحَة page).
+    function mushafSetScopeExplicit(scope) {
+        if (scope === mushafScope) return;
+        mushafScope = scope;
+        if (mushafHTMode) {
+            const page = document.getElementById('mushaf-page');
+            if (page) {
+                clearAllCoverClips();
+                applyHTReveal();
+            }
+        }
+        updateModeBtns();
+    }
+
+    // Keyboard shortcut ,/. — step the reveal slider forward/backward by 6%.
+    // At the right end (100%) it behaves like a finger lift: the active ayah
+    // is committed as revealed and the slider snaps back to reveal the next.
+    function mushafSliderStep(dir) {
+        const page = document.getElementById('mushaf-page');
+        if (!page) return;
+        mushafRevealPct = Math.max(0, Math.min(100, (mushafRevealPct || 0) + dir * 6));
+        applyMushafReveal();
+        if (mushafRevealPct >= 100) {
+            // mirror the slider 'change' (finger-lift) auto-restart
+            const covered = [...page.querySelectorAll('.mf-verse.covered')];
+            if (covered.length) {
+                const ak = covered[0].dataset.vkey;
+                page.querySelectorAll(`.mf-verse[data-vkey="${ak}"]`).forEach(v => v.classList.remove('covered'));
+                mushafSliderKey = null;
+                if (!page.querySelector('.mf-verse.covered')) {
+                    mushafClozeMode = 'all';
+                    mushafHTMode = null;
+                    updateModeBtns();
+                }
+            }
+            mushafRevealPct = 0;
+            applyMushafReveal();
+        }
+    }
+
     // Apply the active head/tail reveal over the current cloze. Scope 'one'
     // (آيَة) reveals the chosen 1/6 of ONLY the first covered ayah; scope
     // 'all' (صَفْحَة) reveals every covered ayah.
@@ -2824,7 +2864,9 @@
             }, { passive: false });
         }
         // Keyboard: ← → navigate pages (mushaf RTL — left advances like the
-        // ◀ button), Space reveals cloze one by one. Ignored while typing.
+        // ◀ button), Space reveals cloze one by one. Study keys: H/T head|tail,
+        // A/S ayah|safhah scope, ,/. advance|reverse the reveal slider.
+        // Ignored while typing.
         document.addEventListener('keydown', e => {
             if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
             const tag = (e.target.tagName || '').toLowerCase();
@@ -2835,6 +2877,12 @@
             else if (e.key === 'ArrowUp') { e.preventDefault(); mushafClozeFromBottom(); }
             else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); mushafClozeMiddleOnly(); }
             else if (e.code === 'Space' || e.key === ' ') { e.preventDefault(); mushafRevealNext(); }
+            else if (e.key === 'h' || e.key === 'H') { e.preventDefault(); mushafSetHT('head'); }
+            else if (e.key === 't' || e.key === 'T') { e.preventDefault(); mushafSetHT('tail'); }
+            else if (e.key === 'a' || e.key === 'A') { e.preventDefault(); mushafSetScopeExplicit('one'); }
+            else if (e.key === 's' || e.key === 'S') { e.preventDefault(); mushafSetScopeExplicit('all'); }
+            else if (e.key === ',') { e.preventDefault(); mushafSliderStep(1); }
+            else if (e.key === '.') { e.preventDefault(); mushafSliderStep(-1); }
         });
     })();
 

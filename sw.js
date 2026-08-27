@@ -3,7 +3,7 @@
 // because service-worker caches are wiped on every app update. Audio requests
 // pass straight through to the network — the page serves blob: URLs from
 // IndexedDB when files are saved, so this never blocks offline playback.
-const CACHE = 'quran-player-v48';
+const CACHE = 'quran-player-v49';
 // All per-ayah page coordinates are precached so classic-mode cloze works offline.
 const COORDS = Array.from({ length: 604 }, (_, i) => './page-coords/' + (i + 1) + '.json');
 const SHELL = [
