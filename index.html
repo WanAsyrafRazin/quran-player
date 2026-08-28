@@ -270,9 +270,15 @@
                 0 2px 8px rgba(0, 0, 0, 0.30);
             backdrop-filter: blur(2px);
             -webkit-backdrop-filter: blur(2px);
+            transition: width .15s ease, height .15s ease, margin-top .15s ease,
+                        background .15s ease, border-color .15s ease;
         }
-        .mf-reveal-slider::-webkit-slider-thumb:active {
-            background: rgba(169, 128, 59, 0.35);
+        /* grow while held/dragged — easier to grab mid-slide */
+        .mf-reveal-slider:active::-webkit-slider-thumb {
+            width: 54px;
+            height: 54px;
+            margin-top: -24px;
+            background: rgba(169, 128, 59, 0.4);
             border-color: #A9803B;
         }
         .mf-reveal-slider::-moz-range-track {
@@ -295,6 +301,14 @@
                 inset 0 2px 6px rgba(255, 255, 255, 0.65),
                 inset 0 -3px 6px rgba(169, 128, 59, 0.45),
                 0 2px 8px rgba(0, 0, 0, 0.30);
+            transition: width .15s ease, height .15s ease, background .15s ease,
+                        border-color .15s ease;
+        }
+        .mf-reveal-slider:active::-moz-range-thumb {
+            width: 54px;
+            height: 54px;
+            background: rgba(169, 128, 59, 0.4);
+            border-color: #A9803B;
         }
         body.dark-mode .mf-reveal-slider::-webkit-slider-runnable-track {
             background: linear-gradient(90deg, #D9B877 var(--fill, 0%), #2D3748 var(--fill, 0%));
@@ -1504,7 +1518,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v54';
+    const APP_VERSION = 'v55';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
