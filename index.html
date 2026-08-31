@@ -145,6 +145,9 @@
             cursor: pointer;
             flex-shrink: 0;
         }
+        /* Help button: pinned to the far LEFT of the header; the rest of the
+           controls stay centered. */
+        #mushaf-help-btn { margin-right: auto; }
         .mushaf-nav:hover { background: rgba(255,255,255,.3); }
         .mushaf-nav:disabled { opacity: 0.4; cursor: not-allowed; }
         .mushaf-float-close {
@@ -1479,6 +1482,7 @@
     <!-- Floating Mushaf window (QCF text-rendered, per-ayah cloze at exact positions) -->
     <div class="mushaf-float" id="mushaf-panel">
         <div class="mushaf-float-header" id="mushaf-drag">
+            <button type="button" class="mushaf-nav" id="mushaf-help-btn" onclick="openHelp()" title="Help &amp; hotkeys" aria-label="Help and hotkeys">❓</button>
             <div class="mushaf-float-title" id="mushaf-info">Loading…</div>
             <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(1)" aria-label="Next page" title="Next page">◀</button>
             <button class="mushaf-nav" id="mushaf-play" onclick="mushafTogglePlay()" aria-label="Play or pause" title="Play / pause">▶</button>
@@ -1492,7 +1496,6 @@
                 <input type="number" id="mushaf-page-input" class="mushaf-page-input" min="1" max="604" inputmode="numeric" aria-label="Page number">
                 <button type="button" class="mushaf-go" id="mushaf-go-btn">Go</button>
             </label>
-            <button type="button" class="mushaf-go" id="mushaf-help-btn" onclick="openHelp()" title="Help &amp; hotkeys" aria-label="Help and hotkeys">❓</button>
             <div class="mushaf-mode-group" id="mushaf-mode-group">
                 <button type="button" class="mushaf-mode-btn" id="mushaf-toggle-all" onclick="mushafToggleAll()">🔒 Cloze All</button>
                 <div class="mushaf-ht" id="mushaf-ht" style="display:none">
@@ -1545,7 +1548,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v56';
+    const APP_VERSION = 'v57';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
