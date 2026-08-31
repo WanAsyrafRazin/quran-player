@@ -110,16 +110,18 @@
         .mushaf-float-header {
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
+            gap: 6px;
             /* safe-area: keep the heading below the dynamic island / notch
                (viewport-fit=cover puts the header edge at the screen edge) */
-            padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
-            padding-left: calc(12px + env(safe-area-inset-left, 0px));
-            padding-right: calc(12px + env(safe-area-inset-right, 0px));
+            padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px;
+            padding-left: calc(10px + env(safe-area-inset-left, 0px));
+            padding-right: calc(10px + env(safe-area-inset-right, 0px));
             background: #3F5E68;
             color: #fff;
             user-select: none;
             flex-shrink: 0;
+            flex-wrap: wrap;
         }
         .mushaf-float-title {
             flex: 1;
@@ -128,6 +130,9 @@
             text-align: center;
             line-height: 1.35;
             pointer-events: none;
+            /* the page/surah info already lives in the mushaf corners —
+               hide this redundant text so the header stays uncluttered */
+            display: none;
         }
         .mushaf-nav {
             border: none;
@@ -160,8 +165,8 @@
             padding: 6px 16px calc(10px + env(safe-area-inset-bottom, 0px));
             background: #FDFBF4;
             flex: 1;
-            /* horizontal gestures (page swipes) belong to the app, not the browser */
-            touch-action: pan-y;
+            /* gestures belong to the app: no browser pan/zoom (double-tap zoom off) */
+            touch-action: manipulation;
         }
         .mushaf-loading {
             text-align: center;
@@ -482,13 +487,13 @@
         .mushaf-float-controls {
             display: flex;
             align-items: center;
-            gap: 6px;
+            flex-wrap: wrap;      /* wrap instead of scroll — everything stays
+                                     visible on narrow Android screens */
+            gap: 5px 6px;
             padding: 5px 10px 4px;
             background: #F4EFE2;
             border-bottom: 1px solid #E8E0CC;
             flex-shrink: 0;
-            overflow-x: auto;      /* never let buttons push off-screen */
-            -webkit-overflow-scrolling: touch;
         }
         /* Study controls: Cloze All ↔ Reveal All toggle + conditional 1/6 —
            segmented group, only one active at a time */
@@ -670,6 +675,28 @@
             .mf-foot { min-height: 30px; }
             .mf-surah-header .name { font-size: 0.95em; }
             .mushaf-mode-btn { font-size: 11px; padding: 4px 6px; }
+        }
+        /* Short screens (small Android phones / landscape): compress the
+           mushaf chrome so the whole page + slider fit with no scroll. */
+        @media (max-height: 700px) {
+            .mushaf-float-header { padding-top: calc(4px + env(safe-area-inset-top, 0px)); padding-bottom: 4px; }
+            .mushaf-nav { width: 34px; height: 30px; }
+            .mushaf-float-close { width: 30px; height: 30px; }
+            .mushaf-float-controls { padding-top: 3px; padding-bottom: 3px; }
+            .mushaf-mode-btn { font-size: 11px; padding: 3px 6px; }
+            .mushaf-ht-btn { font-size: 11px; padding: 3px 6px; }
+            .mushaf-ht-label { font-size: 11px; padding: 3px 6px; }
+            .mushaf-page-input { width: 40px; padding: 2px 4px; }
+            .mushaf-go { padding: 3px 7px; font-size: 12px; }
+            .mf-reveal-slider { height: 20px; }
+            .mf-reveal-row { padding: 0; }
+            .mf-foot { min-height: 22px; margin-top: 0; }
+            .mf-foot-hint { font-size: 11px; }
+            .mushaf-float-body { padding: 4px 12px 2px; }
+        }
+        @media (max-height: 600px) {
+            .mf-line { line-height: 1.75; }
+            .mf-frame-top { padding-bottom: 2px; }
         }
         @media (min-width: 600px) {
             /* tablets / large phones: cap the page column width so lines
@@ -1518,7 +1545,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v55';
+    const APP_VERSION = 'v56';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2118,12 +2145,18 @@
             }
             let shrink = 1;
             if (worst) shrink = cw / worstW;
-            // Height budget: the frame is a fixed classic-style box — content
-            // (corners + header + lines) must end before the frame bottom edge.
-            const frameR = pageEl.querySelector('.mf-frame').getBoundingClientRect();
+            // Height budget: the frame must fit the AVAILABLE BODY HEIGHT
+            // (viewport minus header/controls/slider-row/foot) — so short
+            // Android screens shrink the mushaf instead of clipping it.
+            const bodyEl = pageEl.closest('.mushaf-float-body') || pageEl.parentElement;
+            const rowEl = pageEl.querySelector('.mf-reveal-row');
+            const footEl = pageEl.querySelector('.mf-foot');
+            const rowH = rowEl ? rowEl.getBoundingClientRect().height : 0;
+            const footH = footEl ? footEl.getBoundingClientRect().height : 0;
+            const hBudget = (bodyEl ? bodyEl.clientHeight : 600) - rowH - footH - 14;
             const midR = pageEl.querySelector('.mf-frame-mid').getBoundingClientRect();
-            const hBudget = frameR.height - 2;
-            const hUsed = midR.bottom - frameR.top;
+            const topR = pageEl.querySelector('.mf-frame-top').getBoundingClientRect();
+            const hUsed = midR.bottom - topR.top;
             if (hUsed > hBudget) shrink = Math.min(shrink, hBudget / hUsed);
             if (shrink >= 0.995) break;
             fs = Math.max(7, Math.floor(fs * shrink * 10) / 10);
@@ -2218,7 +2251,12 @@
         const panel = document.getElementById('mushaf-panel');
         const body = document.getElementById('mushaf-page');
         const availW = (panel ? panel.getBoundingClientRect().width : 430) - 32;
-        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32 - 40);
+        // reserve: horizontal padding (~32) + corners row. The corners row is
+        // compact on short screens, so measure the actual margin instead of a
+        // fixed 40px — keeps the whole page visible with no scroll on Android.
+        const cornerRow = pageEl.querySelector('.mf-classic-corners');
+        const cornerH = cornerRow ? cornerRow.getBoundingClientRect().height : 40;
+        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32 - cornerH - 8);
         const dispW = Math.min(availW, availH * iw / ih);
         const maxW = Math.min(dispW, iw);
         const scale = maxW / iw;
