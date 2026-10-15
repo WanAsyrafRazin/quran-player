@@ -19,7 +19,7 @@
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: #F6F7FA;
+            background-color: #fff;
             color: #1A1A1A;
             margin: 0;
             padding: 20px 20px 340px 20px;
@@ -103,7 +103,7 @@
             height: 100dvh;
             display: none;
             flex-direction: column;
-            background: #FDFBF4;
+            background: #fff;
             overflow: hidden;
         }
         .mushaf-float.visible { display: flex; }
@@ -166,7 +166,7 @@
             overflow: hidden;
             /* bottom safe-area: keep the tap strip above the home indicator */
             padding: 6px 16px calc(10px + env(safe-area-inset-bottom, 0px));
-            background: #FDFBF4;
+            background: #fff;
             flex: 1;
             /* gestures belong to the app: no browser pan/zoom (double-tap zoom off) */
             touch-action: manipulation;
@@ -354,9 +354,10 @@
             height: 100%;
             object-fit: contain;
         }
-        /* Classic-mode corner labels (surah right, PAGE NUMBER center, juz
-           left) — rendered in their OWN row ABOVE the image (mirroring the
-           plain frame-top), so they never cover the scanned page. */
+        /* Classic-mode corner labels (surah right, juz left) — rendered in their OWN
+           row ABOVE the image, so they never cover the scanned page. The PAGE NUMBER
+           moved out of this row in v61: it now sits centred UNDER the image, just
+           above the reveal slider (see .mf-pagenum-row). */
         .mf-classic-corners {
             display: flex;
             justify-content: space-between;
@@ -368,7 +369,21 @@
             pointer-events: none;
         }
         .mf-classic-corners .mf-corner-box { font-size: 12px; }
-        .mf-classic-corners .mf-pagenum { font-size: 13px; }
+        /* v61: the page number row, centred between the page image and the slider. */
+        .mf-pagenum-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 5px auto 0;
+            flex-shrink: 0;
+            pointer-events: none;
+        }
+        .mf-pagenum-row .mf-pagenum {
+            font-size: 13px;
+            font-weight: 700;
+            color: #A9803B;
+        }
+        body.dark-mode .mf-pagenum-row .mf-pagenum { color: #D9B877; }
         .mf-classic .mf-classic-text {
             position: absolute;
             inset: 0;
@@ -379,7 +394,7 @@
         .mf-classic .mf-classic-text .mf-word { color: transparent; }
         .mf-classic .mf-classic-text .mf-end { color: transparent; }
         .mf-classic .mf-classic-text .mf-cover {
-            background: var(--mf-cover-bg, #FDFBF4);
+            background: var(--mf-cover-bg, #fff);
             box-shadow:
                 inset 0 2px 3px rgba(90, 60, 20, .28),
                 inset 0 -2px 3px rgba(255, 255, 255, .7),
@@ -392,7 +407,7 @@
            (sampled per page into --mf-cover-bg) — not the app background,
            and not the dark-mode background */
         .mf-classic > .mf-verse .mf-cover {
-            background: var(--mf-cover-bg, #FDFBF4);
+            background: var(--mf-cover-bg, #fff);
         }
         .mf-verse {
             position: relative;
@@ -426,7 +441,7 @@
             padding: 2px 8px;
             /* cloze blends with the page: same background colour, with an
                inset bevel so the cover looks embossed/bezelled into the page */
-            background: #FDFBF4;
+            background: #fff;
             color: #A9803B;
             border-radius: 7px;
             box-shadow:
@@ -563,7 +578,7 @@
         }
         .mushaf-mode-btn {
             border: 1px solid #C9A96A;
-            background: #FDFBF4;
+            background: #fff;
             color: #7A5A1E;
             border-radius: 9px;
             padding: 5px 8px;
@@ -588,14 +603,14 @@
             border-radius: 9px;
             overflow: hidden;
             flex-shrink: 0;
-            background: #FDFBF4;
+            background: #fff;
             /* RTL mirrors the verse: رَأْس (head) at the right, ذَيْل (tail)
                at the left — like the ayah itself flows right → left */
             direction: rtl;
         }
         .mushaf-ht-btn {
             border: none;
-            background: #FDFBF4;
+            background: #fff;
             color: #7A5A1E;
             padding: 5px 8px;
             font-size: 12px;
@@ -1347,7 +1362,7 @@
             max-width: 380px;
             max-height: 85vh;
             overflow-y: auto;
-            background: #FDFBF4;
+            background: #fff;
             border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
             transform: translateY(8px);
@@ -1603,7 +1618,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v60';
+    const APP_VERSION = 'v61';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2207,6 +2222,11 @@
             // inset inside an illuminated frame, and the frame's pink/green ornament
             // otherwise dominates the histogram (the covers came out pink).
             const cw0 = Math.round(iw * 0.5), ch0 = Math.round(ih * 0.5);
+            // v61: the Madani scans keep the PAPER as a transparent colour, so fill the
+            // canvas with white first — the sample then reports the paper (= white), not
+            // the printed ink. Matters now that the app background is white too.
+            cx.fillStyle = '#fff';
+            cx.fillRect(0, 0, 64, 64);
             cx.drawImage(img, Math.round((iw - cw0) / 2), Math.round((ih - ch0) / 2), cw0, ch0, 0, 0, 64, 64);
             const d = cx.getImageData(0, 0, 64, 64).data;
             const counts = new Map();
@@ -2234,7 +2254,9 @@
         // fixed 40px — keeps the whole page visible with no scroll on Android.
         const cornerRow = pageEl.querySelector('.mf-classic-corners');
         const cornerH = cornerRow ? cornerRow.getBoundingClientRect().height : 40;
-        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32 - cornerH - 8);
+        // v61: the page number now lives in its own row UNDER the image (above the
+        // slider), so reserve its height as well or the fitted page overflows.
+        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32 - cornerH - 26 - 8);
         const dispW = Math.min(availW, availH * iw / ih);
         const maxW = Math.min(dispW, iw);
         const scale = maxW / iw;
@@ -2340,13 +2362,13 @@
         pageEl.innerHTML = `
             <div class="mf-classic-corners" style="width:${maxW}px;">
                 <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
-                <span class="mf-corner-box mf-pagenum">${toArabicDigits(p)}</span>
                 <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
             </div>
             <div class="mf-classic" style="aspect-ratio:${iw}/${ih};width:${maxW}px;" onclick="classicTap(event)">
                 <img class="mf-classic-img" src="${displaySrc}" alt="Page ${p}" draggable="false">
                 ${headersHtml}${markersHtml}${textLayer}${coversHtml}
             </div>
+            <div class="mf-pagenum-row" style="width:${maxW}px;"><span class="mf-pagenum">${toArabicDigits(p)}</span></div>
             <div class="mf-reveal-row"><input type="range" class="mf-reveal-slider" min="0" max="100" value="${mushafRevealPct}" aria-label="Reveal cloze gradually"></div>
             <div class="mf-foot">
                 <span class="mf-foot-hint">👆 Tap empty space to reveal one by one</span>
