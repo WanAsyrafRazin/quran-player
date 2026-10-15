@@ -3,9 +3,9 @@
 // because service-worker caches are wiped on every app update. Audio requests
 // pass straight through to the network — the page serves blob: URLs from
 // IndexedDB when files are saved, so this never blocks offline playback.
-const CACHE = 'quran-player-v59';
-// All per-ayah page coordinates are precached so classic-mode cloze works offline.
-const COORDS = Array.from({ length: 604 }, (_, i) => './page-coords/' + (i + 1) + '.json');
+const CACHE = 'quran-player-v60';
+// v60: the plain text mode (and its page-coords/) is gone; each edition's own
+// coordinates are fetched per page and cached by the SW at runtime.
 const SHELL = [
   './',
   './index.html',
@@ -24,7 +24,7 @@ const PAGE_IMG_RE = /raw\.githubusercontent\.com\/QuranHub\/quran-pages-images/;
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE)
-      .then((c) => c.addAll(SHELL.concat(COORDS)))
+      .then((c) => c.addAll(SHELL))
       .then(() => self.skipWaiting())
   );
 });
