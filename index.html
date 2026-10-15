@@ -19,7 +19,7 @@
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: #fff;
+            background-color: #F6F7FA;
             color: #1A1A1A;
             margin: 0;
             padding: 20px 20px 340px 20px;
@@ -95,6 +95,9 @@
         }
 
         /* Mushaf — floating QCF text-rendered window (exact mushaf layout, per-ayah cloze) */
+        /* v62: the surfaces AROUND the page image are white to match the scans' own
+           pure-white paper (any other colour shows a seam at the image edge). This is
+           ONLY the page surroundings — the rest of the app keeps its normal colours. */
         .mushaf-float {
             position: fixed;
             z-index: 10000;
@@ -578,7 +581,7 @@
         }
         .mushaf-mode-btn {
             border: 1px solid #C9A96A;
-            background: #fff;
+            background: #FDFBF4;
             color: #7A5A1E;
             border-radius: 9px;
             padding: 5px 8px;
@@ -603,14 +606,14 @@
             border-radius: 9px;
             overflow: hidden;
             flex-shrink: 0;
-            background: #fff;
+            background: #FDFBF4;
             /* RTL mirrors the verse: رَأْس (head) at the right, ذَيْل (tail)
                at the left — like the ayah itself flows right → left */
             direction: rtl;
         }
         .mushaf-ht-btn {
             border: none;
-            background: #fff;
+            background: #FDFBF4;
             color: #7A5A1E;
             padding: 5px 8px;
             font-size: 12px;
@@ -1362,7 +1365,7 @@
             max-width: 380px;
             max-height: 85vh;
             overflow-y: auto;
-            background: #fff;
+            background: #FDFBF4;
             border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
             transform: translateY(8px);
@@ -1618,7 +1621,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v61';
+    const APP_VERSION = 'v62';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
