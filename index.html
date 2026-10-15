@@ -1587,7 +1587,8 @@
         <div class="offline-buttons">
             <button id="dl-murattal" class="dl-btn" onclick="downloadRecitation('murattal_timestamps.json')">⬇ Download Murattal (fast) — 628 MB</button>
             <button id="dl-mujawwad" class="dl-btn" onclick="downloadRecitation('mujawwad_timestamps.json')">⬇ Download Mujawwad — 1.3 GB</button>
-            <button id="dl-mushaf" class="dl-btn" onclick="downloadMushafPages()">⬇ Save Mushaf pages (Plain + Classic) — 604 pages</button>
+            <button id="dl-mushaf" class="dl-btn" onclick="downloadMushafPages('madani')">⬇ Save Madani Mushaf 1421 — 604 pages (~48 MB)</button>
+            <button id="dl-mushaf-tajweed" class="dl-btn" onclick="downloadMushafPages('tajweed')">⬇ Save Tajweed Mushaf — 604 pages (~134 MB)</button>
         </div>
         <div id="dl-progress" class="dl-progress" style="display:none;"></div>
         <div class="offline-hint">💡 <b>Install:</b> iPhone/iPad Safari → Share → <b>Add to Home Screen</b>. Then open the app icon (full-screen, like a native app). Audio is <b>saved permanently on your device</b> whenever you play a surah — or grab everything with the buttons above. Files survive app updates. Keep the app open while downloading. Works in airplane mode once saved.</div>
@@ -1621,7 +1622,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v62';
+    const APP_VERSION = 'v63';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2072,13 +2073,13 @@
     }
 
     const pageCoords = {}; // 'edition:page' -> precomputed per-ayah rects (image px)
-    async function getPageCoords(p) {
-        const key = mushafMode + ':' + p;
+    async function getPageCoordsFor(mode, p) {
+        const key = mode + ':' + p;
         if (pageCoords[key]) return pageCoords[key];
         try {
             // v58: each edition carries its own geometry — a tajweed page insets its text
             // block inside the illuminated frame, so plain-page coords do NOT transfer.
-            const dir = mushafSet().coords;
+            const dir = (MUSHAF_SETS[mode] || MUSHAF_SETS.madani).coords;
             const res = await fetch(`${dir}${p}.json`);
             if (!res.ok) return null;
             const d = await res.json();
@@ -2088,6 +2089,8 @@
             return null;
         }
     }
+
+    async function getPageCoords(p) { return getPageCoordsFor(mushafMode, p); }
 
     function mushafFontSize(w, h) {
         // Match quran.com's generator ratio: ptsize = page width / 21, capped so
@@ -3997,60 +4000,88 @@
     // (qp_pagewords_N) via the app's own loader. Both make page loads instant.
     let downloadingMushaf = false;
 
-    function mushafPageImgUrl(p) {
+    function mushafPageImgUrlFor(mode, p) {
         // v58: editions use 3-digit page naming (page001.png) in their own directory.
-        const s = mushafSet();
+        const s = MUSHAF_SETS[mode] || MUSHAF_SETS.madani;
         return s.img + 'page' + String(p).padStart(3, '0') + '.png';
     }
+    function mushafPageImgUrl(p) { return mushafPageImgUrlFor(mushafMode, p); }
 
-    async function mushafPageSaved(p) {
+    async function mushafPageSavedFor(mode, p) {
         try {
-            const blob = await idbGet(mushafPageImgUrl(p));
-            const words = localStorage.getItem('qp_pagewords_' + p);
-            return !!(blob && words);
+            // v63: an edition's page counts as saved once its IMAGE blob is stored.
+            // (The old plain-mode word data is no longer required — plain mode is gone.)
+            const blob = await idbGet(mushafPageImgUrlFor(mode, p));
+            return !!blob;
         } catch (e) { return false; }
     }
 
-    async function downloadMushafPages() {
+    // v63: how much device storage an edition's saved pages actually occupy.
+    // The images live in IndexedDB as blobs, so sum their real sizes.
+    async function mushafStorage(mode, keyList) {
+        try {
+            const prefix = mushafPageImgUrlFor(mode, 1).replace(/page001\.png$/, '');
+            const keys = keyList || await idbKeys();
+            const mine = keys.filter(k => k.indexOf(prefix) === 0);
+            const blobs = await Promise.all(mine.map(k => idbGet(k).catch(() => null)));
+            let bytes = 0, pages = 0;
+            for (const b of blobs) {
+                if (b && b.size) { bytes += b.size; pages++; }
+            }
+            return { bytes: bytes, pages: pages };
+        } catch (e) {
+            return { bytes: 0, pages: 0 };
+        }
+    }
+
+    function fmtMB(bytes) {
+        const mb = bytes / 1048576;
+        if (mb >= 100) return Math.round(mb) + ' MB';
+        if (mb >= 10) return mb.toFixed(1) + ' MB';
+        return mb.toFixed(1) + ' MB';
+    }
+
+    async function downloadMushafPages(edition) {
         if (downloadingMushaf) return;
         if (!('caches' in window)) { alert('This browser cannot save pages. Use Safari/Chrome on mobile.'); return; }
+        // v63: each edition has its OWN button, its own images and its own resume
+        // counter (v59) — so both editions can be saved independently.
+        const mode = MUSHAF_SETS[edition] ? edition : mushafMode;
+        const setName = MUSHAF_SETS[mode].name;
         const progressEl = document.getElementById('dl-progress');
         downloadingMushaf = true;
-        document.getElementById('dl-mushaf').disabled = true;
-        document.getElementById('dl-murattal').disabled = true;
-        document.getElementById('dl-mujawwad').disabled = true;
+        for (const id of ['dl-mushaf', 'dl-mushaf-tajweed', 'dl-murattal', 'dl-mujawwad']) {
+            const el = document.getElementById(id);
+            if (el) el.disabled = true;
+        }
         progressEl.style.display = 'block';
-        // v59: the resume counter is PER EDITION — each edition has its own image
-        // files, so one shared counter would report "604/604 saved" after an edition
-        // switch and skip every page (the new edition would never be saved).
-        const savedKey = 'qp_pages_saved_' + mushafMode;
+        const savedKey = 'qp_pages_saved_' + mode;
         let done = parseInt(localStorage.getItem(savedKey) || '0', 10);
-        progressEl.textContent = `Preparing… ${done}/604 already saved`;
+        progressEl.textContent = `Preparing ${setName}… ${done}/604 already saved`;
         try {
             for (let p = 1; p <= 604; p++) {
                 if (p <= done) continue; // contiguous resume
-                if (await mushafPageSaved(p)) { done++; localStorage.setItem(savedKey, done); continue; }
+                if (await mushafPageSavedFor(mode, p)) { done++; localStorage.setItem(savedKey, done); continue; }
                 // page scan → PERMANENT IndexedDB storage (survives app updates
                 // and cache wipes, exactly like the audio files)
-                const url = mushafPageImgUrl(p);
+                const url = mushafPageImgUrlFor(mode, p);
                 if (!(await idbGet(url))) {
                     const r = await fetch(url);
                     if (!r.ok) throw new Error('image HTTP ' + r.status);
                     await idbSet(url, await r.blob());
                 }
-                // v59: cache this page's per-ayah geometry too (the SW stores it), so
+                // cache this page's per-ayah geometry too (the SW stores it), so
                 // cloze/reveal land exactly right on a page never opened online.
-                await getPageCoords(p);
-                // plain word data (the app's own loader stores it in localStorage)
-                await getPageWords(p);
+                await getPageCoordsFor(mode, p);
                 done++;
                 localStorage.setItem(savedKey, done);
-                progressEl.textContent = `Saving mushaf pages… ${done}/604 (${Math.round(done / 604 * 100)}%) — page ${p}`;
+                if (p % 100 === 0) updateOfflineStatus();   // keep the storage figure live
+                progressEl.textContent = `Saving ${setName}… ${done}/604 (${Math.round(done / 604 * 100)}%) — page ${p}`;
                 if (p % 5 === 0) await new Promise(r => setTimeout(r, 0)); // let the UI paint
             }
-            progressEl.textContent = '✅ All 604 mushaf pages saved — plain & classic load instantly (even offline).';
+            progressEl.textContent = `✅ All 604 ${setName} pages saved — they load instantly, even offline.`;
         } catch (e) {
-            progressEl.textContent = `⚠ Failed at page ${done + 1} (${e.message}). Press again to resume — saved pages are kept.`;
+            progressEl.textContent = `⚠ ${setName}: failed at page ${done + 1} (${e.message}). Press again to resume — saved pages are kept.`;
         }
         downloadingMushaf = false;
         updateOfflineStatus();
@@ -4083,15 +4114,24 @@
         bm.innerHTML = murDone ? '✅ Murattal (fast) — saved (114/114)' : '⬇ Download Murattal (fast) — 628 MB';
         bj.innerHTML = mujDone ? '✅ Mujawwad — saved (114/114)' : '⬇ Download Mujawwad — 1.3 GB';
 
-        const bmh = document.getElementById('dl-mushaf');
-        if (bmh) {
-            const mSaved = parseInt(localStorage.getItem('qp_pages_saved_' + mushafMode) || '0', 10);
-            const allMushaf = mSaved >= 604;
-            const edName = mushafSet().name;
-            bmh.disabled = allMushaf || downloadingMushaf;
-            bmh.innerHTML = allMushaf
-                ? `✅ Mushaf pages saved (604/604 · ${edName}) — instant loads`
-                : (mSaved > 0 ? `⬇ Save Mushaf pages (${edName}) — ${mSaved}/604 saved` : `⬇ Save Mushaf pages (${edName}) — 604 pages`);
+        // v63: one save button per edition, each with its own counter + label, and
+        // each reporting how much device storage its saved pages actually use.
+        const MUSH_SIZES = { madani: '~48 MB', tajweed: '~134 MB' };
+        const usage = {};
+        await Promise.all(MUSHAF_CYCLE.map(async mode => { usage[mode] = await mushafStorage(mode, keys); }));
+        for (const mode of MUSHAF_CYCLE) {
+            const btn = document.getElementById('dl-mushaf' + (mode === 'madani' ? '' : '-' + mode));
+            if (!btn) continue;
+            const saved = parseInt(localStorage.getItem('qp_pages_saved_' + mode) || '0', 10);
+            const complete = saved >= 604;
+            const u = usage[mode] || { bytes: 0, pages: 0 };
+            const onDevice = u.pages ? ` · ${fmtMB(u.bytes)} on device` : '';
+            btn.disabled = complete || downloadingMushaf;
+            btn.innerHTML = complete
+                ? `✅ ${MUSHAF_SETS[mode].name} — saved (604/604)${onDevice}`
+                : (saved > 0
+                    ? `⬇ Save ${MUSHAF_SETS[mode].name} — ${saved}/604 saved${onDevice}`
+                    : `⬇ Save ${MUSHAF_SETS[mode].name} — 604 pages (${MUSH_SIZES[mode] || ''})`);
         }
     }
 
