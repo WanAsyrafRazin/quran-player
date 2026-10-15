@@ -754,6 +754,19 @@
         }
         /* Short screens (small Android phones / landscape): compress the
            mushaf chrome so the whole page + slider fit with no scroll. */
+        /* v64: compact mushaf chrome — a tighter top bar and smaller buttons.
+           Placed BEFORE the short-screen media queries so those still win on
+           small phones (they shrink further). */
+        .mushaf-float-header { gap: 4px; padding: calc(4px + env(safe-area-inset-top, 0px)) 8px 4px; }
+        .mushaf-nav { width: 32px; height: 28px; font-size: 13px; border-radius: 8px; }
+        .mushaf-float-close { width: 30px; height: 28px; font-size: 12px; border-radius: 8px; }
+        .mushaf-float-controls { gap: 4px 5px; padding: 3px 8px; }
+        .mushaf-pagelabel { font-size: 12px; gap: 4px; }
+        /* font-size stays 16px: anything smaller makes iOS zoom on focus */
+        .mushaf-page-input { width: 42px; padding: 3px 5px; }
+        .mushaf-go { padding: 4px 8px; font-size: 12px; }
+        .mushaf-mode-btn { padding: 3px 7px; font-size: 11px; }
+        .mushaf-ht-btn, .mushaf-ht-label { padding: 3px 6px; font-size: 11px; }
         @media (max-height: 700px) {
             .mushaf-float-header { padding-top: calc(4px + env(safe-area-inset-top, 0px)); padding-bottom: 4px; }
             .mushaf-nav { width: 34px; height: 30px; }
@@ -1622,7 +1635,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v63';
+    const APP_VERSION = 'v64';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -1892,9 +1905,13 @@
     // Both image editions are the SAME source the Quran-for-Android app uses: page PNGs
     // plus per-edition ayah geometry regenerated from that app's ayahinfo_<W>.db databases.
     const MUSHAF_SETS = {
-        madani:  { img: 'pages-madani_1421/', coords: 'page-coords-madani_1421/', name: 'Madani Mushaf 1421' },
-        tajweed: { img: 'pages-tajweed/',     coords: 'page-coords-tajweed/',     name: 'Tajweed Mushaf' }
+        madani:  { img: 'pages-madani_1421/', coords: 'page-coords-madani_1421/', name: 'Madani Mushaf 1421', w: 1120, h: 1792 },
+        tajweed: { img: 'pages-tajweed/',     coords: 'page-coords-tajweed/',     name: 'Tajweed Mushaf',     w: 1340, h: 1890 }
     };
+    // v64: both editions share ONE on-screen height. The binding limit is the widest
+    // edition (tajweed); the narrower Madani page keeps its own aspect ratio, so it
+    // renders narrower and centred, with the same empty space above and below.
+    const MUSHAF_MAX_ASPECT = Math.max(...Object.values(MUSHAF_SETS).map(s => s.w / s.h));
     // v60: image editions only — the text-rendered 'plain' mode is gone. Older stored
     // values ('plain'/'classic') migrate to the Madani edition.
     const MUSHAF_CYCLE = ['madani', 'tajweed'];
@@ -2263,7 +2280,10 @@
         // v61: the page number now lives in its own row UNDER the image (above the
         // slider), so reserve its height as well or the fitted page overflows.
         const availH = Math.max(200, (body ? body.clientHeight : 700) - 32 - cornerH - 26 - 8);
-        const dispW = Math.min(availW, availH * iw / ih);
+        // v64: fit to a shared height instead of to this edition's own aspect, so
+        // switching Madani <-> Tajweed never changes the page height or the margins.
+        const sharedH = Math.min(availH, availW / MUSHAF_MAX_ASPECT);
+        const dispW = Math.min(availW, sharedH * iw / ih);
         const maxW = Math.min(dispW, iw);
         const scale = maxW / iw;
 
