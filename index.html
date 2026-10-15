@@ -1548,7 +1548,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v58';
+    const APP_VERSION = 'v59';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2999,6 +2999,7 @@
         mushafMode = MUSHAF_CYCLE[(i + 1) % MUSHAF_CYCLE.length];
         try { localStorage.setItem('qp_mushaf_style', mushafMode); } catch (e) {}
         applyMushafModeBtn();
+        try { updateOfflineStatus(); } catch (e) {}   // v59: the panel is per-edition
         showMushafPage(mushafPage);
     }
 
@@ -3995,24 +3996,31 @@
         document.getElementById('dl-murattal').disabled = true;
         document.getElementById('dl-mujawwad').disabled = true;
         progressEl.style.display = 'block';
-        let done = parseInt(localStorage.getItem('qp_pages_saved') || '0', 10);
+        // v59: the resume counter is PER EDITION — each edition has its own image
+        // files, so one shared counter would report "604/604 saved" after an edition
+        // switch and skip every page (the new edition would never be saved).
+        const savedKey = 'qp_pages_saved_' + mushafMode;
+        let done = parseInt(localStorage.getItem(savedKey) || '0', 10);
         progressEl.textContent = `Preparing… ${done}/604 already saved`;
         try {
             for (let p = 1; p <= 604; p++) {
                 if (p <= done) continue; // contiguous resume
-                if (await mushafPageSaved(p)) { done++; localStorage.setItem('qp_pages_saved', done); continue; }
-                // classic page scan → PERMANENT IndexedDB storage (survives
-                // app updates and cache wipes, exactly like the audio files)
+                if (await mushafPageSaved(p)) { done++; localStorage.setItem(savedKey, done); continue; }
+                // page scan → PERMANENT IndexedDB storage (survives app updates
+                // and cache wipes, exactly like the audio files)
                 const url = mushafPageImgUrl(p);
                 if (!(await idbGet(url))) {
                     const r = await fetch(url);
                     if (!r.ok) throw new Error('image HTTP ' + r.status);
                     await idbSet(url, await r.blob());
                 }
+                // v59: cache this page's per-ayah geometry too (the SW stores it), so
+                // cloze/reveal land exactly right on a page never opened online.
+                await getPageCoords(p);
                 // plain word data (the app's own loader stores it in localStorage)
                 await getPageWords(p);
                 done++;
-                localStorage.setItem('qp_pages_saved', done);
+                localStorage.setItem(savedKey, done);
                 progressEl.textContent = `Saving mushaf pages… ${done}/604 (${Math.round(done / 604 * 100)}%) — page ${p}`;
                 if (p % 5 === 0) await new Promise(r => setTimeout(r, 0)); // let the UI paint
             }
@@ -4053,12 +4061,13 @@
 
         const bmh = document.getElementById('dl-mushaf');
         if (bmh) {
-            const mSaved = parseInt(localStorage.getItem('qp_pages_saved') || '0', 10);
+            const mSaved = parseInt(localStorage.getItem('qp_pages_saved_' + mushafMode) || '0', 10);
             const allMushaf = mSaved >= 604;
+            const edName = mushafMode === 'plain' ? 'plain text' : mushafSet().name;
             bmh.disabled = allMushaf || downloadingMushaf;
             bmh.innerHTML = allMushaf
-                ? '✅ Mushaf pages saved (604/604) — instant loads'
-                : (mSaved > 0 ? `⬇ Save Mushaf pages (Plain + Classic) — ${mSaved}/604 saved` : '⬇ Save Mushaf pages (Plain + Classic) — 604 pages');
+                ? `✅ Mushaf pages saved (604/604 · ${edName}) — instant loads`
+                : (mSaved > 0 ? `⬇ Save Mushaf pages (${edName}) — ${mSaved}/604 saved` : `⬇ Save Mushaf pages (${edName}) — 604 pages`);
         }
     }
 
