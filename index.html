@@ -355,7 +355,8 @@
             display: block;
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            /* v65: fill, not contain — editions are stretched into the shared box */
+            object-fit: fill;
         }
         /* Classic-mode corner labels (surah right, juz left) — rendered in their OWN
            row ABOVE the image, so they never cover the scanned page. The PAGE NUMBER
@@ -404,8 +405,15 @@
                 0 0 0 1px rgba(120, 90, 30, .12);
         }
         .mf-classic .mf-classic-text .mf-verse:hover { background: transparent; }
-        /* v60: the page area always matches the scanned paper (white/cream), even in dark mode */
-        body.dark-mode .mf-classic { background: #fff; }
+        /* v65 NIGHT MODE: the scan is colour-inverted (the page's paper is a TRANSPARENT
+           colour, so the box behind it must be dark or the inverted light text would sit
+           on a light box). invert + hue-rotate keeps the ornament hues roughly right.
+           This mirrors the night mode of the Quran app on the A70. */
+        body.dark-mode .mf-classic { background: #1A232E; }
+        body.dark-mode .mf-classic-img { filter: invert(1) hue-rotate(180deg); }
+        /* the overlays drawn OVER the page must be inverted with it */
+        body.dark-mode .mf-ayahmark,
+        body.dark-mode .mf-suraband { filter: invert(1) hue-rotate(180deg); }
         /* classic cloze covers always match the scanned page image background
            (sampled per page into --mf-cover-bg) — not the app background,
            and not the dark-mode background */
@@ -721,6 +729,18 @@
         /* Footer strip below the page: the empty region is the reveal-next
            tap target (page number stays dead-centered in classic mode, with
            a hint line under it) */
+        /* v65: everything below the page image (page number + footer + all the empty
+           space down to the slider) is one tap target that reveals the cloze one by one. */
+        .mf-below {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            flex: 1 1 auto;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
         .mf-foot {
             position: relative;
             display: flex;
@@ -1635,7 +1655,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v64';
+    const APP_VERSION = 'v65';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2262,7 +2282,12 @@
             let bestK = null, bestN = 0;
             for (const [k, n] of counts) if (n > bestN) { bestN = n; bestK = k; }
             const [r0, g0, b0] = (bestK || '31,31,29').split(',').map(v => (parseInt(v, 10) << 3) + 4);
-            pageEl.style.setProperty('--mf-cover-bg', `rgb(${r0}, ${g0}, ${b0})`);
+            // v65: in night mode the cover must match what is actually behind the text.
+            // The Madani scan keeps its paper TRANSPARENT, so in night mode the visible
+            // paper IS the dark page box — inverting the sampled white would put a black
+            // box on a navy page (which is exactly what it did). So match the box colour.
+            pageEl.style.setProperty('--mf-cover-bg',
+                document.body.classList.contains('dark-mode') ? '#1A232E' : `rgb(${r0}, ${g0}, ${b0})`);
         } catch (e) { /* canvas blocked or image tainted — fall back to default */ }
 
         // Panel body size: the fullscreen window should show the WHOLE page
@@ -2280,11 +2305,14 @@
         // v61: the page number now lives in its own row UNDER the image (above the
         // slider), so reserve its height as well or the fitted page overflows.
         const availH = Math.max(200, (body ? body.clientHeight : 700) - 32 - cornerH - 26 - 8);
-        // v64: fit to a shared height instead of to this edition's own aspect, so
-        // switching Madani <-> Tajweed never changes the page height or the margins.
+        // v65: both editions are drawn in EXACTLY the same box — same width and height.
+        // Their aspect ratios differ (madani 1120x1792 = 0.625, tajweed 1340x1890 = 0.709),
+        // so the page is stretched to fill that shared box (Asyraf accepted the stretch).
+        // Safe because the ayah geometry, markers and header bands are all stored as
+        // PERCENTAGES of the page: they stretch with the image, so cloze stays aligned.
         const sharedH = Math.min(availH, availW / MUSHAF_MAX_ASPECT);
-        const dispW = Math.min(availW, sharedH * iw / ih);
-        const maxW = Math.min(dispW, iw);
+        const maxW = Math.min(availW, sharedH * MUSHAF_MAX_ASPECT);
+        const boxH = Math.round(sharedH);
         const scale = maxW / iw;
 
         const coords = await getPageCoords(p);
@@ -2390,14 +2418,16 @@
                 <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
                 <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
             </div>
-            <div class="mf-classic" style="aspect-ratio:${iw}/${ih};width:${maxW}px;" onclick="classicTap(event)">
+            <div class="mf-classic" style="width:${maxW}px;height:${boxH}px;" onclick="classicTap(event)">
                 <img class="mf-classic-img" src="${displaySrc}" alt="Page ${p}" draggable="false">
                 ${headersHtml}${markersHtml}${textLayer}${coversHtml}
             </div>
             <div class="mf-pagenum-row" style="width:${maxW}px;"><span class="mf-pagenum">${toArabicDigits(p)}</span></div>
             <div class="mf-reveal-row"><input type="range" class="mf-reveal-slider" min="0" max="100" value="${mushafRevealPct}" aria-label="Reveal cloze gradually"></div>
-            <div class="mf-foot">
-                <span class="mf-foot-hint">👆 Tap empty space to reveal one by one</span>
+            <div class="mf-below">
+                <div class="mf-foot">
+                    <span class="mf-foot-hint">👆 Tap empty space below to reveal one by one</span>
+                </div>
             </div>`;
         updateModeBtns();
         applyMushafReveal();
@@ -3099,7 +3129,7 @@
         const pageEl = document.getElementById('mushaf-page');
         if (pageEl) {
             pageEl.addEventListener('click', e => {
-                if (e.target.closest('.mf-foot')) mushafRevealNext();
+                if (e.target.closest('.mf-foot, .mf-below')) mushafRevealNext();
             });
             // Reveal slider: dragging it unveils the ACTIVE ayah (the first
             // still-covered verse) bit by bit. Reaching the left end (100%)

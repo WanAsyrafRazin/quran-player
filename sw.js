@@ -3,7 +3,7 @@
 // because service-worker caches are wiped on every app update. Audio requests
 // pass straight through to the network — the page serves blob: URLs from
 // IndexedDB when files are saved, so this never blocks offline playback.
-const CACHE = 'quran-player-v64';
+const CACHE = 'quran-player-v65';
 // v60: the plain text mode (and its page-coords/) is gone; each edition's own
 // coordinates are fetched per page and cached by the SW at runtime.
 const SHELL = [
