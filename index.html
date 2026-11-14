@@ -1655,7 +1655,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v66';
+    const APP_VERSION = 'v67';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -1932,6 +1932,10 @@
     // edition (tajweed); the narrower Madani page keeps its own aspect ratio, so it
     // renders narrower and centred, with the same empty space above and below.
     const MUSHAF_MAX_ASPECT = Math.max(...Object.values(MUSHAF_SETS).map(s => s.w / s.h));
+    // v67: EXTRA cream reserved on each side of the page card, on top of the panel's
+    // 16px padding — so the reveal strip beside the page is 16 + 16 = 32px wide and the
+    // card is 32px narrower than before. Taps there reveal the next ayah.
+    const MUSHAF_SIDE_TAP = 16;
     // v60: image editions only — the text-rendered 'plain' mode is gone. Older stored
     // values ('plain'/'classic') migrate to the Madani edition.
     const MUSHAF_CYCLE = ['madani', 'tajweed'];
@@ -2296,7 +2300,10 @@
         // the image since v43, so it never overlaps the scanned page).
         const panel = document.getElementById('mushaf-panel');
         const body = document.getElementById('mushaf-page');
-        const availW = (panel ? panel.getBoundingClientRect().width : 430) - 32;
+        // v67: reserve MUSHAF_SIDE_TAP px of empty cream on EACH side of the card, on
+        // top of the body's 16px padding, so the reveal-by-one tap strip beside the page
+        // is ~32px wide instead of a fiddly 16px. The page shrinks ~9% to pay for it.
+        const availW = (panel ? panel.getBoundingClientRect().width : 430) - 32 - 2 * MUSHAF_SIDE_TAP;
         // reserve: horizontal padding (~32) + corners row. The corners row is
         // compact on short screens, so measure the actual margin instead of a
         // fixed 40px — keeps the whole page visible with no scroll on Android.
