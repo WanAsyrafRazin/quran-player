@@ -1655,7 +1655,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v65';
+    const APP_VERSION = 'v66';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2426,48 +2426,19 @@
             <div class="mf-reveal-row"><input type="range" class="mf-reveal-slider" min="0" max="100" value="${mushafRevealPct}" aria-label="Reveal cloze gradually"></div>
             <div class="mf-below">
                 <div class="mf-foot">
-                    <span class="mf-foot-hint">👆 Tap empty space below to reveal one by one</span>
+                    <span class="mf-foot-hint">👆 Tap beside or below the page to reveal one by one</span>
                 </div>
             </div>`;
         updateModeBtns();
         applyMushafReveal();
     }
 
-    // Tap anywhere on a classic page → toggle the cloze cover of the nearest verse
+    // v66: a tap ON an ayah bar toggles that ayah (the bar handles its own taps).
+    // A tap on empty space INSIDE the page box now does NOTHING — the reveal-one-
+    // by-one target moved out to the cream strips beside the page and below it,
+    // so a near-miss between two lines can no longer re-cover a verse.
     function classicTap(ev) {
-        if (ev.target.closest('.mf-verse')) return; // verse fragments handle their own taps
-        const box = ev.currentTarget;
-        const r = box.getBoundingClientRect();
-        const x = ev.clientX - r.left, y = ev.clientY - r.top;
-        // v60: the image is pointer-events:none, so taps land here. Hit-test the ayah
-        // rectangles directly — a tap INSIDE an ayah toggles THAT ayah (distance to the
-        // nearest rect edge, so taps in the gaps still pick the closest one).
-        const cd = pageCoords[mushafMode + ':' + mushafPage];
-        if (cd && cd.verses) {
-            let hitKey = null, hitD = Infinity;
-            for (const vkey in cd.verses) {
-                for (const [rx, ry, rw, rh] of cd.verses[vkey]) {
-                    const sx = rx / cd.w * r.width, sy = ry / cd.h * r.height;
-                    const sw = rw / cd.w * r.width, sh = rh / cd.h * r.height;
-                    const dx = Math.max(sx - x, 0, x - (sx + sw));
-                    const dy = Math.max(sy - y, 0, y - (sy + sh));
-                    const d2 = dx * dx + dy * dy;
-                    if (d2 < hitD) { hitD = d2; hitKey = vkey; }
-                }
-            }
-            if (hitKey) {
-                const el = box.querySelector(`.mf-verse[data-vkey="${hitKey}"]`);
-                if (el) { toggleVerseCloze(el); return; }
-            }
-        }
-        let best = null, bestD = Infinity;
-        box.querySelectorAll('.mf-verse').forEach(v => {
-            const vr = v.getBoundingClientRect();
-            const cx = vr.left - r.left + vr.width / 2, cy = vr.top - r.top + vr.height / 2;
-            const d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
-            if (d < bestD) { bestD = d; best = v; }
-        });
-        if (best) toggleVerseCloze(best);
+        if (ev.target.closest('.mf-verse')) return;
     }
 
     // Viewport resize (e.g. rotation): the %-based coords covers scale with the
@@ -3129,7 +3100,14 @@
         const pageEl = document.getElementById('mushaf-page');
         if (pageEl) {
             pageEl.addEventListener('click', e => {
-                if (e.target.closest('.mf-foot, .mf-below')) mushafRevealNext();
+                // v65: the whole strip below the page reveals one by one.
+                if (e.target.closest('.mf-foot, .mf-below')) { mushafRevealNext(); return; }
+                // v66: the empty cream strips EITHER SIDE of the page card, and the
+                // page-number row, reveal too — anything in the panel body that is
+                // not the page itself, the corner labels, the slider or a control.
+                if (e.target.closest('.mf-classic, .mf-classic-corners, .mf-reveal-row,'
+                                      + ' input, button, a, select, label')) return;
+                mushafRevealNext();
             });
             // Reveal slider: dragging it unveils the ACTIVE ayah (the first
             // still-covered verse) bit by bit. Reaching the left end (100%)
