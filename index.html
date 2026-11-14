@@ -278,9 +278,9 @@
         .mf-reveal-slider {
             -webkit-appearance: none;
             appearance: none;
-            /* v69: full page width (was 76% / 420 cap) — a longer track means finer
-               control when scrubbing through an ayah */
-            width: 100%;
+            /* v70: exactly 2/3 of the page width (Asyraf's spec) — the row is as wide as
+               the page, so 66.667% of the row is 2/3 of the page (~239px at 390 wide) */
+            width: 66.667%;
             max-width: 560px;
             height: 24px;
             background: transparent;
@@ -1685,7 +1685,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v69';
+    const APP_VERSION = 'v70';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2969,10 +2969,19 @@
         const firstCovered = keys.find(k =>
             page.querySelector(`.mf-verse[data-vkey="${k}"]`).classList.contains('covered'));
         if (!firstCovered) {
-            // v69 PERSISTENCE: every ayah is already revealed — do NOTHING. A tap on
-            // empty space must never hide a verse, because the verses may have been
-            // opened with the slider (or by tapping their bars) and the reader expects
-            // them to stay open. The 🔒 Cloze All button is the explicit way to restart.
+            // v70 (Asyraf's rule): once the whole page is revealed, the NEXT tap re-clozes
+            // EVERYTHING at once — including verses that were opened with the slider or by
+            // tapping their bars — so the page is instantly cloze again and the cycle can
+            // start over. Slider clip-paths are cleared too, or partly-revealed fragments
+            // would survive the reset.
+            clearAllCoverClips();
+            keys.forEach(k => {
+                page.querySelectorAll(`.mf-verse[data-vkey="${k}"]`).forEach(v => v.classList.add('covered'));
+            });
+            mushafRevealPct = 0;
+            mushafClozeMode = 'cloze';
+            updateModeBtns();
+            applyMushafReveal();
             return;
         }
         // reveal-next advances the active ayah → slider resets to default
