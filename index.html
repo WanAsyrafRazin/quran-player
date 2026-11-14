@@ -267,12 +267,21 @@
             /* extra vertical room for the 40px thumb (it may overlap the page) */
             padding: 12px 0 8px;
             flex-shrink: 0;
+            /* v69: the flex-column body shrank this row to its content width (~133px);
+               stretch it so the slider really spans the page width */
+            width: 100%;
+            max-width: 560px;
+            margin-left: auto;
+            margin-right: auto;
         }
+        .mf-foot { width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; }
         .mf-reveal-slider {
             -webkit-appearance: none;
             appearance: none;
-            width: 76%;
-            max-width: 420px;
+            /* v69: full page width (was 76% / 420 cap) — a longer track means finer
+               control when scrubbing through an ayah */
+            width: 100%;
+            max-width: 560px;
             height: 24px;
             background: transparent;
             touch-action: manipulation;
@@ -1676,7 +1685,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v68';
+    const APP_VERSION = 'v69';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2959,20 +2968,20 @@
         if (!keys.length) return;
         const firstCovered = keys.find(k =>
             page.querySelector(`.mf-verse[data-vkey="${k}"]`).classList.contains('covered'));
+        if (!firstCovered) {
+            // v69 PERSISTENCE: every ayah is already revealed — do NOTHING. A tap on
+            // empty space must never hide a verse, because the verses may have been
+            // opened with the slider (or by tapping their bars) and the reader expects
+            // them to stay open. The 🔒 Cloze All button is the explicit way to restart.
+            return;
+        }
         // reveal-next advances the active ayah → slider resets to default
         mushafRevealPct = 0;
-        if (!firstCovered) {
-            // study loop restarts: cover everything
-            keys.forEach(k => {
-                page.querySelectorAll(`.mf-verse[data-vkey="${k}"]`).forEach(v => v.classList.add('covered'));
-            });
-        } else {
-            page.querySelectorAll(`.mf-verse[data-vkey="${firstCovered}"]`).forEach(v => v.classList.remove('covered'));
-            // if everything is now revealed, sync the mode buttons
-            if (!page.querySelector('.mf-verse.covered')) {
-                mushafClozeMode = 'all';
-                updateModeBtns();
-            }
+        page.querySelectorAll(`.mf-verse[data-vkey="${firstCovered}"]`).forEach(v => v.classList.remove('covered'));
+        // if everything is now revealed, sync the mode buttons
+        if (!page.querySelector('.mf-verse.covered')) {
+            mushafClozeMode = 'all';
+            updateModeBtns();
         }
         // re-apply the armed head/tail setting to the NEW active ayah
         // (آيَة scope: the next first-covered verse gets its head/tail)
