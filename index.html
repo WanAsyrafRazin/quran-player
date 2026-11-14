@@ -173,7 +173,28 @@
             flex: 1;
             /* gestures belong to the app: no browser pan/zoom (double-tap zoom off) */
             touch-action: manipulation;
+            /* v68: a flex column so the empty band between the page number and the
+               slider can absorb the spare height instead of leaving it stranded at
+               the very bottom of the panel. */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
+        /* nothing in the stack may be squashed when the viewport is short */
+        .mushaf-float-body > * { flex-shrink: 0; }
+        /* v68: the main reveal-by-one tap target — the empty band between the page
+           number and the slider. Grows with the free space but is CAPPED at 80px so
+           the slider never jams against the bottom edge; the leftover falls through
+           to .mf-below, which is a tap target too. */
+        .mf-slider-gap {
+            /* grow twice as eagerly as .mf-below so the band reaches the 80px cap on a
+               normal phone instead of splitting the spare height evenly */
+            flex: 2 1 auto;
+            min-height: 0;
+            max-height: 80px;
+            width: 100%;
+        }
+        .mushaf-float-body .mf-below { flex: 1 1 auto; }
         .mushaf-loading {
             text-align: center;
             color: #8E919D;
@@ -1655,7 +1676,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v67';
+    const APP_VERSION = 'v68';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -1932,10 +1953,9 @@
     // edition (tajweed); the narrower Madani page keeps its own aspect ratio, so it
     // renders narrower and centred, with the same empty space above and below.
     const MUSHAF_MAX_ASPECT = Math.max(...Object.values(MUSHAF_SETS).map(s => s.w / s.h));
-    // v67: EXTRA cream reserved on each side of the page card, on top of the panel's
-    // 16px padding — so the reveal strip beside the page is 16 + 16 = 32px wide and the
-    // card is 32px narrower than before. Taps there reveal the next ayah.
-    const MUSHAF_SIDE_TAP = 16;
+    // v68: side strips are back to the panel's own 16px padding (Asyraf preferred the
+    // bigger bottom tap area over wider side targets). Set >0 to reserve extra cream.
+    const MUSHAF_SIDE_TAP = 0;
     // v60: image editions only — the text-rendered 'plain' mode is gone. Older stored
     // values ('plain'/'classic') migrate to the Madani edition.
     const MUSHAF_CYCLE = ['madani', 'tajweed'];
@@ -2430,6 +2450,7 @@
                 ${headersHtml}${markersHtml}${textLayer}${coversHtml}
             </div>
             <div class="mf-pagenum-row" style="width:${maxW}px;"><span class="mf-pagenum">${toArabicDigits(p)}</span></div>
+            <div class="mf-slider-gap"></div>
             <div class="mf-reveal-row"><input type="range" class="mf-reveal-slider" min="0" max="100" value="${mushafRevealPct}" aria-label="Reveal cloze gradually"></div>
             <div class="mf-below">
                 <div class="mf-foot">
