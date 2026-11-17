@@ -179,6 +179,8 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            /* v71: anchor for the side-mounted vertical slider */
+            position: relative;
         }
         /* nothing in the stack may be squashed when the viewport is short */
         .mushaf-float-body > * { flex-shrink: 0; }
@@ -195,6 +197,34 @@
             width: 100%;
         }
         .mushaf-float-body .mf-below { flex: 1 1 auto; }
+        /* v71: the reveal slider can also live on either side, vertical and near the
+           bottom. The row becomes an absolutely-positioned box whose CENTRE sits where
+           JS puts it, then rotates -90deg: value 0 ends up at the bottom, 100 at the top,
+           so dragging UP reveals — same muscle memory as the horizontal one. */
+        .mf-reveal-row.side {
+            position: absolute;
+            bottom: 70px;                 /* near the bottom, clear of the home indicator */
+            width: 44px;                  /* final footprint: thumb thickness */
+            height: var(--rail-len, 240px);
+            padding: 0;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 6;
+        }
+        .mf-reveal-row.side.right { right: 4px; }
+        .mf-reveal-row.side.left  { left: 4px; }
+        /* the track keeps its length; only the INPUT rotates, inside the box above */
+        .mf-reveal-row.side .mf-reveal-slider {
+            width: var(--rail-len, 240px);
+            /* the input has a ~129px intrinsic width and would be flex-shrunk by the
+               44px-wide rail box — pin it or the rail collapses to a stub */
+            min-width: var(--rail-len, 240px);
+            flex: 0 0 auto;
+            height: 44px;
+            transform: rotate(90deg);     /* value 0 ends up at the BOTTOM → drag up reveals */
+        }
         .mushaf-loading {
             text-align: center;
             color: #8E919D;
@@ -268,9 +298,10 @@
             padding: 12px 0 8px;
             flex-shrink: 0;
             /* v69: the flex-column body shrank this row to its content width (~133px);
-               stretch it so the slider really spans the page width */
+               stretch it so the slider really spans the page width. v71: the 560px cap is
+               gone — the track is 2/3 of the screen, which is wider than 560 on tablets. */
             width: 100%;
-            max-width: 560px;
+            max-width: none;
             margin-left: auto;
             margin-right: auto;
         }
@@ -278,10 +309,10 @@
         .mf-reveal-slider {
             -webkit-appearance: none;
             appearance: none;
-            /* v70: exactly 2/3 of the page width (Asyraf's spec) — the row is as wide as
-               the page, so 66.667% of the row is 2/3 of the page (~239px at 390 wide) */
-            width: 66.667%;
-            max-width: 560px;
+            /* v71: 2/3 of the SCREEN width (his spec) — same length when the slider is
+               rotated onto a side rail, so the track keeps one physical size everywhere */
+            width: min(66.667vw, 100%);
+            max-width: none;
             height: 24px;
             background: transparent;
             touch-action: manipulation;
@@ -839,8 +870,9 @@
         }
         @media (min-width: 600px) {
             /* tablets / large phones: cap the page column width so lines
-              don't stretch absurdly; centre it in the available space */
-            .mf-reveal-row, .mf-foot { max-width: 560px; margin-left: auto; margin-right: auto; }
+              don't stretch absurdly; centre it in the available space.
+              v71: the SLIDER row is no longer capped — it must be 2/3 of the screen. */
+            .mf-foot { max-width: 560px; margin-left: auto; margin-right: auto; }
         }
         .mushaf-caption {
             text-align: center;
@@ -1625,6 +1657,7 @@
             <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(-1)" aria-label="Previous page" title="Previous page">▶</button>
             <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle page style" title="Plain text — tap to switch">⬛</button>
             <button class="mushaf-nav" id="mushaf-theme-btn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Night mode">🌙</button>
+            <button class="mushaf-nav" id="mushaf-slider-btn" onclick="cycleSliderPos()" aria-label="Move the reveal slider" title="Reveal slider: bottom (tap to move)">⬇</button>
             <button class="mushaf-float-close" id="mushaf-close" onclick="toggleMushaf()" aria-label="Close Mushaf">✕</button>
         </div>
         <div class="mushaf-float-controls">
@@ -1685,7 +1718,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v70';
+    const APP_VERSION = 'v71';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -1965,6 +1998,9 @@
     // v68: side strips are back to the panel's own 16px padding (Asyraf preferred the
     // bigger bottom tap area over wider side targets). Set >0 to reserve extra cream.
     const MUSHAF_SIDE_TAP = 0;
+    // v71: width reserved on EACH side of the page when the reveal slider is mounted on a
+    // side rail (44px thumb + breathing room). The page shrinks by 2× this to make room.
+    const MUSHAF_RAIL_GUTTER = 56;
     // v60: image editions only — the text-rendered 'plain' mode is gone. Older stored
     // values ('plain'/'classic') migrate to the Madani edition.
     const MUSHAF_CYCLE = ['madani', 'tajweed'];
@@ -2332,7 +2368,9 @@
         // v67: reserve MUSHAF_SIDE_TAP px of empty cream on EACH side of the card, on
         // top of the body's 16px padding, so the reveal-by-one tap strip beside the page
         // is ~32px wide instead of a fiddly 16px. The page shrinks ~9% to pay for it.
-        const availW = (panel ? panel.getBoundingClientRect().width : 430) - 32 - 2 * MUSHAF_SIDE_TAP;
+        const railGutter = mushafSliderPos === 'bottom' ? 0 : MUSHAF_RAIL_GUTTER;
+        const availW = (panel ? panel.getBoundingClientRect().width : 430) - 32
+                       - 2 * MUSHAF_SIDE_TAP - 2 * railGutter;
         // reserve: horizontal padding (~32) + corners row. The corners row is
         // compact on short screens, so measure the actual margin instead of a
         // fixed 40px — keeps the whole page visible with no scroll on Android.
@@ -2340,7 +2378,10 @@
         const cornerH = cornerRow ? cornerRow.getBoundingClientRect().height : 40;
         // v61: the page number now lives in its own row UNDER the image (above the
         // slider), so reserve its height as well or the fitted page overflows.
-        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32 - cornerH - 26 - 8);
+        // v71: also reserve the slider row (~48) and the hint strip (~34) — on an iPad the
+        // page used to grow into them, which is why the slider ended up jammed against the
+        // bottom edge / clipped off-screen.
+        const availH = Math.max(200, (body ? body.clientHeight : 700) - 32 - cornerH - 26 - 82 - 8);
         // v65: both editions are drawn in EXACTLY the same box — same width and height.
         // Their aspect ratios differ (madani 1120x1792 = 0.625, tajweed 1340x1890 = 0.709),
         // so the page is stretched to fill that shared box (Asyraf accepted the stretch).
@@ -2468,6 +2509,54 @@
             </div>`;
         updateModeBtns();
         applyMushafReveal();
+        applySliderLayout();
+    }
+
+    // ── v71: where the reveal slider lives ─────────────────────────────────────────
+    // 'bottom' (default, in flow) | 'right' | 'left' (vertical rail near the bottom).
+    // Remembered per device — an iPad on a stand wants the rail, a phone wants the bar.
+    let mushafSliderPos = (() => {
+        try { return localStorage.getItem('qp_slider_pos') || 'bottom'; } catch (e) { return 'bottom'; }
+    })();
+
+    function updateSliderBtn() {
+        const b = document.getElementById('mushaf-slider-btn');
+        if (!b) return;
+        b.textContent = mushafSliderPos === 'bottom' ? '⬇' : (mushafSliderPos === 'right' ? '➡' : '⬅');
+        b.title = 'Reveal slider: ' + mushafSliderPos + ' (tap to move it)';
+        b.setAttribute('aria-label', 'Move the reveal slider (now ' + mushafSliderPos + ')');
+    }
+
+    function cycleSliderPos() {
+        mushafSliderPos = mushafSliderPos === 'bottom' ? 'right'
+                        : mushafSliderPos === 'right' ? 'left' : 'bottom';
+        try { localStorage.setItem('qp_slider_pos', mushafSliderPos); } catch (e) {}
+        showMushafPage(mushafPage);   // re-render so the page reserves (or frees) the gutter
+    }
+
+    // Place the slider: in flow at the bottom, or an absolutely positioned vertical rail
+    // whose CENTRE is computed here, then rotated -90deg (0 at the bottom, 100 at the top,
+    // so dragging UP reveals). Length = 2/3 of the screen width, like the horizontal one,
+    // clamped to the panel height so it can never overflow.
+    function applySliderLayout() {
+        const body = document.getElementById('mushaf-page');
+        const row = body && body.querySelector('.mf-reveal-row');
+        updateSliderBtn();
+        if (!row) return;
+        if (mushafSliderPos === 'bottom') {
+            row.classList.remove('side', 'right', 'left');
+            row.removeAttribute('style');
+            return;
+        }
+        const br = body.getBoundingClientRect();
+        // length = 2/3 of the screen width (same physical size as the horizontal track),
+        // but never taller than the panel can hold above its bottom margin
+        const len = Math.max(140, Math.min(Math.round(window.innerWidth * 2 / 3),
+                                           Math.round(br.height - 200)));
+        row.classList.add('side');
+        row.classList.toggle('right', mushafSliderPos === 'right');
+        row.classList.toggle('left', mushafSliderPos === 'left');
+        row.style.setProperty('--rail-len', len + 'px');
     }
 
     // v66: a tap ON an ayah bar toggles that ayah (the bar handles its own taps).
