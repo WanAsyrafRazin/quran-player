@@ -312,8 +312,10 @@
             -webkit-appearance: none;
             appearance: none;
             /* v72: 1/3 of the SCREEN width (was 2/3) — same length when the slider is
-               rotated onto a side rail, so the track keeps one physical size everywhere */
-            width: min(33.333vw, 100%);
+               rotated onto a side rail, so the track keeps one physical size everywhere.
+               v73: length is a user setting — percent of the SCREEN width, set from
+               the ⚙ Settings panel (20–100%, default 33%). */
+            width: min(var(--slider-len, 33.333vw), 100%);
             max-width: none;
             height: 24px;
             background: transparent;
@@ -1470,6 +1472,14 @@
             -webkit-overflow-scrolling: touch;
         }
         .help-overlay.visible .help-modal { transform: translateY(0); }
+        /* v73: ⚙ Settings rows */
+        .set-row { padding: 10px 16px 2px; }
+        .set-hint { padding: 6px 16px 12px; font-size: 11px; line-height: 1.5; color: #718096; }
+        body.dark-mode .set-hint { color: #A0AEC0; }
+        .set-slider-row { display: flex; align-items: center; gap: 10px; }
+        .set-slider-row input[type=range] { flex: 1 1 auto; min-width: 0; accent-color: #A9803B; }
+        .set-val { font-size: 12px; font-weight: 700; color: #A9803B; min-width: 38px; text-align: right; }
+        #main-view-seg { width: 100%; }
         body.dark-mode .help-modal { background: #1A232E; }
         .help-head {
             display: flex;
@@ -1536,6 +1546,7 @@
     <!-- Top Bar: version badge (left) + Theme Toggle (right) -->
     <div class="top-bar">
         <span class="version-badge" id="version-badge">…</span>
+        <button class="theme-toggle" id="home-settings-btn" onclick="openSettings()" aria-label="Settings" title="Settings" style="width:34px;height:34px;font-size:16px;">⚙</button>
         <button class="theme-toggle" id="home-help-btn" onclick="openHelp()" aria-label="Help and hotkeys" title="Help &amp; hotkeys" style="width:34px;height:34px;font-size:16px;">❓</button>
         <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌙</button>
     </div>
@@ -1720,7 +1731,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v72';
+    const APP_VERSION = 'v73';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -1835,6 +1846,10 @@
             
             populateDropdowns();
             updateLocationBar();
+            applySliderLen();
+            setSliderLen(mushafSliderLen, false);
+            syncMainViewUI();
+            if (qpMainView === 'mushaf') restoreMainViewMushaf();
         } catch (error) {
             console.error("Error loading data:", error);
             document.getElementById('from-verse').innerHTML = `<option>Error loading database</option>`;
@@ -1986,6 +2001,18 @@
     const MUSHAF_FONT_BASE = 'https://raw.githubusercontent.com/quran/quran.com-images/master/res/fonts/';
     const SURAH_NAMES_AR = {"1":"الفاتحة","2":"البقرة","3":"آل عمران","4":"النساء","5":"المائدة","6":"الأنعام","7":"الأعراف","8":"الأنفال","9":"التوبة","10":"يونس","11":"هود","12":"يوسف","13":"الرعد","14":"ابراهيم","15":"الحجر","16":"النحل","17":"الإسراء","18":"الكهف","19":"مريم","20":"طه","21":"الأنبياء","22":"الحج","23":"المؤمنون","24":"النور","25":"الفرقان","26":"الشعراء","27":"النمل","28":"القصص","29":"العنكبوت","30":"الروم","31":"لقمان","32":"السجدة","33":"الأحزاب","34":"سبإ","35":"فاطر","36":"يس","37":"الصافات","38":"ص","39":"الزمر","40":"غافر","41":"فصلت","42":"الشورى","43":"الزخرف","44":"الدخان","45":"الجاثية","46":"الأحقاف","47":"محمد","48":"الفتح","49":"الحجرات","50":"ق","51":"الذاريات","52":"الطور","53":"النجم","54":"القمر","55":"الرحمن","56":"الواقعة","57":"الحديد","58":"المجادلة","59":"الحشر","60":"الممتحنة","61":"الصف","62":"الجمعة","63":"المنافقون","64":"التغابن","65":"الطلاق","66":"التحريم","67":"الملك","68":"القلم","69":"الحاقة","70":"المعارج","71":"نوح","72":"الجن","73":"المزمل","74":"المدثر","75":"القيامة","76":"الانسان","77":"المرسلات","78":"النبإ","79":"النازعات","80":"عبس","81":"التكوير","82":"الإنفطار","83":"المطففين","84":"الإنشقاق","85":"البروج","86":"الطارق","87":"الأعلى","88":"الغاشية","89":"الفجر","90":"البلد","91":"الشمس","92":"الليل","93":"الضحى","94":"الشرح","95":"التين","96":"العلق","97":"القدر","98":"البينة","99":"الزلزلة","100":"العاديات","101":"القارعة","102":"التكاثر","103":"العصر","104":"الهمزة","105":"الفيل","106":"قريش","107":"الماعون","108":"الكوثر","109":"الكافرون","110":"النصر","111":"المسد","112":"الإخلاص","113":"الفلق","114":"الناس"};
     let mushafPage = 1;
+    // v73: user settings — which screen is home, and how long the reveal slider is.
+    // Both persist per device in localStorage (same convention as qp_slider_pos).
+    let qpMainView = (function () {
+        try { return localStorage.getItem('qp_main_view') === 'mushaf' ? 'mushaf' : 'selection'; }
+        catch (e) { return 'selection'; }
+    })();
+    let mushafSliderLen = (function () {
+        try {
+            const v = parseInt(localStorage.getItem('qp_slider_len') || '33', 10);
+            return (v >= 20 && v <= 100) ? v : 33;
+        } catch (e) { return 33; }
+    })();
     // v58: 'plain' (QCF text) | 'madani' (Madani Mushaf 1421 pages) | 'tajweed' (Tajweed Mushaf pages).
     // Both image editions are the SAME source the Quran-for-Android app uses: page PNGs
     // plus per-edition ayah geometry regenerated from that app's ayahinfo_<W>.db databases.
@@ -2228,6 +2255,7 @@
     async function showMushafPage(p) {
         p = Math.min(604, Math.max(1, p));
         mushafPage = p;
+        try { localStorage.setItem('qp_last_page', String(p)); } catch (e) {}
         const pin = document.getElementById('mushaf-page-input');
         if (pin) pin.value = p;
         const info = document.getElementById('mushaf-info');
@@ -2553,7 +2581,7 @@
         const br = body.getBoundingClientRect();
         // length = 2/3 of the screen width (same physical size as the horizontal track),
         // but never taller than the panel can hold above its bottom margin
-        const len = Math.max(110, Math.min(Math.round(window.innerWidth / 3),
+        const len = Math.max(110, Math.min(Math.round(window.innerWidth * (mushafSliderLen / 100)),
                                            Math.round(br.height - 200)));
         row.classList.add('side');
         row.classList.toggle('right', mushafSliderPos === 'right');
@@ -2951,7 +2979,7 @@
         const inp = document.getElementById('mushaf-page-input');
         if (!inp) return;
         const v = parseInt(inp.value, 10);
-        if (!isNaN(v) && v >= 1 && v <= 604) showMushafPage(v);
+        if (!isNaN(v) && v >= 1 && v <= 604) { showMushafPage(v); mushafSyncAudioToPage(v); }
         else { inp.value = mushafPage; }
     }
 
@@ -3201,14 +3229,106 @@
 
     // The mushaf follows the selection (any mode) and playback while visible
     function syncMushafFromSelection() {
+        if (mushafAudioBusy) return;   // v73: don't fight an in-flight page-turn sync
         if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
         const a = allAyahs[selStartIdx];
         if (!a) return;
         if (a.page !== mushafPage) showMushafPage(a.page);
     }
 
+    // ── v73 settings helpers ────────────────────────────────────────────────
+    // Slider length: one number (percent of the screen width) drives BOTH the
+    // horizontal track (CSS var) and the vertical rail (pixel length in JS).
+    function applySliderLen() {
+        document.documentElement.style.setProperty('--slider-len', mushafSliderLen + 'vw');
+        try { applySliderLayout(); } catch (e) {}
+    }
+
+    function setSliderLen(v, persist) {
+        const n = parseInt(v, 10);
+        mushafSliderLen = (!isNaN(n) && n >= 20 && n <= 100) ? n : 33;
+        applySliderLen();
+        const el = document.getElementById('set-slider-len');
+        if (el && el.value !== String(mushafSliderLen)) el.value = mushafSliderLen;
+        const lab = document.getElementById('slider-len-val');
+        if (lab) lab.textContent = mushafSliderLen + '%';
+        if (persist) { try { localStorage.setItem('qp_slider_len', String(mushafSliderLen)); } catch (e) {} }
+    }
+
+    function syncMainViewUI() {
+        document.querySelectorAll('#main-view-seg .seg-option').forEach(b => {
+            b.classList.toggle('selected', b.dataset.view === qpMainView);
+        });
+    }
+
+    function setMainView(v) {
+        qpMainView = (v === 'mushaf') ? 'mushaf' : 'selection';
+        try { localStorage.setItem('qp_main_view', qpMainView); } catch (e) {}
+        syncMainViewUI();
+    }
+
+    // App boot: if the mushaf is the main page, open it on the last page read and
+    // point the audio selection at that page so ▶ matches the screen.
+    function restoreMainViewMushaf() {
+        const panel = document.getElementById('mushaf-panel');
+        const btn = document.getElementById('mushaf-toggle-btn');
+        if (!panel) return;
+        let last = 0;
+        try { last = parseInt(localStorage.getItem('qp_last_page') || '0', 10); } catch (e) {}
+        const a = allAyahs[selStartIdx];
+        const p = (last >= 1 && last <= 604) ? last : (a ? a.page : 1);
+        panel.classList.add('visible');
+        if (btn) btn.classList.add('active');
+        showMushafPage(p);
+        mushafSyncAudioToPage(p);
+    }
+
+    // ── v73: AUDIO FOLLOWS THE PAGE ─────────────────────────────────────────
+    // A page turn makes that page the audio selection (first→last ayah of the
+    // page). Guarded by mushafAudioBusy so selection → mushaf sync cannot call
+    // back into itself while we are rewriting the selection.
+    let mushafAudioBusy = false;
+    function mushafSyncAudioToPage(p) {
+        if (mushafAudioBusy) return;
+        const firstIdx = allAyahs.findIndex(a => a.page === p);
+        if (firstIdx < 0) return;
+        let lastIdx = firstIdx;
+        while (lastIdx + 1 < allAyahs.length && allAyahs[lastIdx + 1].page === p) lastIdx++;
+        if (currentMode === 'page' && selStartIdx === firstIdx && selEndIdx === lastIdx) return;
+        mushafAudioBusy = true;
+        try {
+            currentMode = 'page';
+            document.querySelectorAll('.mode-select .seg-option').forEach(b => {
+                b.classList.toggle('selected', (b.getAttribute('onclick') || '').indexOf("'page'") !== -1);
+            });
+            selStartIdx = firstIdx;
+            selEndIdx = lastIdx;
+            persistSelection();
+            populateDropdowns();
+            updateLocationBar();
+            if (isPlaying) restartPlaybackFromSelection();
+        } finally { mushafAudioBusy = false; }
+    }
+
+    // Re-cut the playlist from the current selection without touching play state.
+    function restartPlaybackFromSelection() {
+        const selectedAyahs = allAyahs.slice(selStartIdx, selEndIdx + 1);
+        const next = buildTimestampPlaylist(selectedAyahs);
+        if (!next || next.length === 0) return;   // keep current audio if no timestamps
+        playlist = next;
+        currentAyahIndex = 0;
+        currentAyahRepeatCount = 1;
+        currentRangeRepeatCount = 1;
+        currentPageRepeatCount = 1;
+        currentMaqraRepeatCount = 1;
+        playCurrentVerse();
+    }
+
     function mushafGo(dir) {
-        showMushafPage(mushafPage + dir);
+        const p = Math.min(604, Math.max(1, mushafPage + dir));
+        if (p === mushafPage) return;
+        showMushafPage(p);
+        mushafSyncAudioToPage(p);   // v73: audio follows the page just turned to
     }
 
     // Floating window: draggable via its header
@@ -4367,6 +4487,35 @@
     loadQuranData();
 </script>
 
+<!-- Settings modal (v73) -->
+<div class="help-overlay" id="settings-overlay" onclick="if (event.target === this) closeSettings()">
+    <div class="help-modal" role="dialog" aria-label="Settings">
+        <div class="help-head">
+            <span>⚙ Settings</span>
+            <button type="button" class="help-close" onclick="closeSettings()" aria-label="Close">✕</button>
+        </div>
+        <div class="help-body">
+            <div class="help-section"><div class="help-title">Main page</div>
+                <div class="set-row">
+                    <div class="segmented-control" id="main-view-seg">
+                        <button class="seg-option selected" data-view="selection" onclick="setMainView('selection')">Audio selection</button>
+                        <button class="seg-option" data-view="mushaf" onclick="setMainView('mushaf')">Mushaf page</button>
+                    </div>
+                </div>
+                <div class="set-hint">Which screen the app opens to. The mushaf reopens on the last page you were reading, and the audio selection follows that page.</div>
+            </div>
+            <div class="help-section"><div class="help-title">Reveal slider length</div>
+                <div class="set-row set-slider-row">
+                    <input type="range" id="set-slider-len" min="20" max="100" step="1" value="33"
+                           oninput="setSliderLen(this.value, true)" aria-label="Reveal slider length">
+                    <span class="set-val" id="slider-len-val">33%</span>
+                </div>
+                <div class="set-hint">Percent of the screen width. Applies to the bottom slider and to the side rail.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Help / hotkeys modal -->
 <div class="help-overlay" id="help-overlay" onclick="if (event.target === this) closeHelp()">
     <div class="help-modal" role="dialog" aria-label="Help and hotkeys">
@@ -4412,8 +4561,19 @@
         const o = document.getElementById('help-overlay');
         if (o) o.classList.remove('visible');
     }
+    // v73 settings modal
+    function openSettings() {
+        const o = document.getElementById('settings-overlay');
+        if (o) o.classList.add('visible');
+        setSliderLen(mushafSliderLen, false);
+        syncMainViewUI();
+    }
+    function closeSettings() {
+        const o = document.getElementById('settings-overlay');
+        if (o) o.classList.remove('visible');
+    }
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') closeHelp();
+        if (e.key === 'Escape') { closeHelp(); closeSettings(); }
     });
 </script>
 
