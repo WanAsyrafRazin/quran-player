@@ -1480,6 +1480,18 @@
         .set-slider-row input[type=range] { flex: 1 1 auto; min-width: 0; accent-color: #A9803B; }
         .set-val { font-size: 12px; font-weight: 700; color: #A9803B; min-width: 38px; text-align: right; }
         #main-view-seg { width: 100%; }
+        /* v74: controller key HUD — shows what a Bluetooth remote actually sends */
+        .key-hud {
+            position: fixed; left: 10px; bottom: 10px; z-index: 100001;
+            max-width: calc(100vw - 20px);
+            padding: 6px 10px; border-radius: 8px;
+            background: rgba(15,23,32,.92); color: #F7FAFC;
+            font: 600 11px/1.4 ui-monospace, Menlo, monospace;
+            opacity: 0; pointer-events: none; transition: opacity .15s ease;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .key-hud.visible { opacity: 1; }
+        #key-hud-btn.selected { background: #A9803B; color: #fff; }
         body.dark-mode .help-modal { background: #1A232E; }
         .help-head {
             display: flex;
@@ -1731,7 +1743,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v73';
+    const APP_VERSION = 'v74';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -3121,6 +3133,97 @@
         applyMushafReveal();
     }
 
+    // v74: step BACK over the reveal — re-cover the LAST revealed ayah in reading
+    // order. The mirror of mushafRevealNext(), so a two-button remote can go both ways.
+    function mushafClozePrev() {
+        const page = document.getElementById('mushaf-page');
+        if (!page) return;
+        const keys = [];
+        page.querySelectorAll('.mf-verse').forEach(el => {
+            const k = el.dataset.vkey;
+            if (k && !keys.includes(k)) keys.push(k);
+        });
+        if (!keys.length) return;
+        let lastRevealed = null;
+        for (let i = keys.length - 1; i >= 0; i--) {
+            const el = page.querySelector(`.mf-verse[data-vkey="${keys[i]}"]`);
+            if (el && !el.classList.contains('covered')) { lastRevealed = keys[i]; break; }
+        }
+        if (!lastRevealed) return;              // nothing revealed — stay put
+        clearAllCoverClips();
+        page.querySelectorAll(`.mf-verse[data-vkey="${lastRevealed}"]`).forEach(v => v.classList.add('covered'));
+        mushafRevealPct = 0;
+        mushafClozeMode = 'cloze';
+        updateModeBtns();
+        applyMushafReveal();
+    }
+
+    // ── v74: controller support ─────────────────────────────────────────────
+    // A Bluetooth remote can enumerate either way, so both paths are wired:
+    //   1. HID KEYBOARD (8BitDo Micro in keyboard mode) → keydown events, handled
+    //      by the study-key listener further down. PageDown/PageUp are now accepted
+    //      as well as arrows/space, because the Ultimate Software maps to those.
+    //   2. HID GAMEPAD (the Micro's default mode) → NO keydown ever fires; only the
+    //      Gamepad API sees it. Polled below.
+    let keyHudOn = false;
+    let keyHudT = null;
+    function keyHud(msg) {
+        const el = document.getElementById('key-hud');
+        if (!el) return;
+        el.querySelector('.kh-val').textContent = msg;
+        if (!keyHudOn) return;
+        el.classList.add('visible');
+        clearTimeout(keyHudT);
+        keyHudT = setTimeout(() => { if (keyHudOn) el.classList.remove('visible'); }, 4000);
+    }
+    function toggleKeyHud() {
+        keyHudOn = !keyHudOn;
+        const el = document.getElementById('key-hud');
+        const btn = document.getElementById('key-hud-btn');
+        if (el) el.classList.toggle('visible', keyHudOn);
+        if (btn) btn.classList.toggle('selected', keyHudOn);
+        if (keyHudOn) keyHud('waiting for a button… (no event = gamepad mode)');
+    }
+    function keyHudPress(k, c) {
+        if (k !== c) keyHud(`⌨ key="${k}"  code="${c}"`);
+        else keyHud(`⌨ key="${k}"`);
+    }
+    (function initGamepadBridge() {
+        const PAD_MAP = {
+            0: 'reveal', 1: 'unreveal', 2: 'toggleAll', 3: 'nextPage',
+            4: 'prevPage', 5: 'nextPage', 12: 'prevPage', 13: 'nextPage'
+        };
+        const prev = {};
+        function act(a) {
+            if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
+            if (a === 'reveal') mushafRevealNext();
+            else if (a === 'unreveal') mushafClozePrev();
+            else if (a === 'toggleAll') mushafToggleAll();
+            else if (a === 'nextPage') mushafGo(1);
+            else if (a === 'prevPage') mushafGo(-1);
+        }
+        function poll() {
+            const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+            for (const pad of pads) {
+                if (!pad) continue;
+                pad.buttons.forEach((b, i) => {
+                    const k = pad.index + ':' + i;
+                    if (b.pressed && !prev[k]) {
+                        keyHud(`🎮 pad${pad.index} btn ${i}${PAD_MAP[i] ? ' → ' + PAD_MAP[i] : ''}`);
+                        if (PAD_MAP[i]) act(PAD_MAP[i]);
+                    }
+                    prev[k] = b.pressed;
+                });
+            }
+            requestAnimationFrame(poll);
+        }
+        window.addEventListener('gamepadconnected', e => {
+            keyHud('🎮 connected: ' + String(e.gamepad.id).slice(0, 28));
+        });
+        window.addEventListener('gamepaddisconnected', () => keyHud('🎮 disconnected'));
+        requestAnimationFrame(poll);
+    })();
+
     // Reveal slider: unveils ONE ayah — the first still-covered verse in
     // reading order (top→bottom) — bit by bit. As the slider moves (RTL:
     // 0 = fully covered on the right, 100 = fully revealed on the left),
@@ -3507,9 +3610,18 @@
         // A/S ayah|safhah scope, ,/. advance|reverse the reveal slider.
         // Ignored while typing.
         document.addEventListener('keydown', e => {
-            if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
             const tag = (e.target.tagName || '').toLowerCase();
-            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+            const field = (tag === 'input' || tag === 'textarea' || tag === 'select');
+            keyHudPress(e.key, e.code);          // v74 diagnostic overlay
+            // v74: a stale focused field used to swallow EVERY shortcut — after using
+            // the page-number box, a remote's keys silently did nothing. Keep digits,
+            // Enter/Tab/Escape and arrows for the field; anything else blurs it.
+            if (field) {
+                if (/^[0-9]$/.test(e.key) || e.key === 'Enter' || e.key === 'Escape'
+                    || e.key === 'Tab' || e.key.indexOf('Arrow') === 0) return;
+                e.target.blur();
+            }
+            if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
             if (e.key === 'ArrowLeft') { e.preventDefault(); mushafGo(1); }
             else if (e.key === 'ArrowRight') { e.preventDefault(); mushafGo(-1); }
             else if (e.key === 'ArrowDown') { e.preventDefault(); mushafClozeFromTop(); }
@@ -3522,6 +3634,8 @@
             else if (e.key === 's' || e.key === 'S') { e.preventDefault(); mushafSetScopeExplicit('all'); }
             else if (e.key === ',') { e.preventDefault(); mushafSliderStep(1); }
             else if (e.key === '.') { e.preventDefault(); mushafSliderStep(-1); }
+            else if (e.key === 'PageDown') { e.preventDefault(); mushafRevealNext(); }
+            else if (e.key === 'PageUp') { e.preventDefault(); mushafClozePrev(); }
         });
     })();
 
@@ -4487,6 +4601,8 @@
     loadQuranData();
 </script>
 
+<div class="key-hud" id="key-hud"><span class="kh-val">…</span></div>
+
 <!-- Settings modal (v73) -->
 <div class="help-overlay" id="settings-overlay" onclick="if (event.target === this) closeSettings()">
     <div class="help-modal" role="dialog" aria-label="Settings">
@@ -4511,6 +4627,12 @@
                     <span class="set-val" id="slider-len-val">33%</span>
                 </div>
                 <div class="set-hint">Percent of the screen width. Applies to the bottom slider and to the side rail.</div>
+            </div>
+            <div class="help-section"><div class="help-title">Controller test</div>
+                <div class="set-row">
+                    <button type="button" class="seg-option" id="key-hud-btn" onclick="toggleKeyHud()">Show key output</button>
+                </div>
+                <div class="set-hint">Turn this on, then press a button on the remote. A key name means keyboard mode. A “🎮 pad… btn N” means gamepad mode — both work. Nothing at all means the remote is not paired as an input device.</div>
             </div>
         </div>
     </div>
