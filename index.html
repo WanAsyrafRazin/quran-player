@@ -1743,7 +1743,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v75';
+    const APP_VERSION = 'v74';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -1860,8 +1860,6 @@
             updateLocationBar();
             applySliderLen();
             setSliderLen(mushafSliderLen, false);
-            setTapStep(mushafTapStep, false);
-            setHoldStep(mushafHoldStep, false);
             syncMainViewUI();
             if (qpMainView === 'mushaf') restoreMainViewMushaf();
         } catch (error) {
@@ -2027,22 +2025,6 @@
             return (v >= 20 && v <= 100) ? v : 33;
         } catch (e) { return 33; }
     })();
-    // v75: reveal steps, both as a percentage of the WHOLE PAGE's text width
-    // (page 31 = 5234px, so 1% ≈ 52px). Tap = one press; hold = each repeat.
-    let mushafTapStep = (function () {
-        try {
-            const v = parseFloat(localStorage.getItem('qp_tap_step') || '2');
-            return (v >= 1 && v <= 20) ? v : 2;
-        } catch (e) { return 2; }
-    })();
-    let mushafHoldStep = (function () {
-        try {
-            const v = parseFloat(localStorage.getItem('qp_hold_step') || '0.5');
-            return (v >= 0.1 && v <= 5) ? v : 0.5;
-        } catch (e) { return 0.5; }
-    })();
-    const PAGE_HOLD_DELAY = 250;   // ms before a press becomes a hold
-    const PAGE_HOLD_EVERY = 80;    // ms between hold steps (0.5% → ~16s per page)
     // v58: 'plain' (QCF text) | 'madani' (Madani Mushaf 1421 pages) | 'tajweed' (Tajweed Mushaf pages).
     // Both image editions are the SAME source the Quran-for-Android app uses: page PNGs
     // plus per-edition ayah geometry regenerated from that app's ayahinfo_<W>.db databases.
@@ -3445,146 +3427,6 @@
         playCurrentVerse();
     }
 
-    // ── v75: page reveal position R ─────────────────────────────────────────
-    // R is 0–100 = the share of the PAGE's summed text width that is revealed.
-    // It is used ONLY by , . PageDown PageUp (per the v75 grill). Space, the
-    // slider and empty-space taps keep the v70 per-ayah engine, and any of those
-    // actions makes R get recomputed from the DOM — so the two never fight.
-    function pageTotalWidth() {
-        const page = document.getElementById('mushaf-page');
-        if (!page) return 0;
-        let t = 0;
-        page.querySelectorAll('.mf-verse').forEach(f => {
-            t += Math.max(1, f.getBoundingClientRect().width);
-        });
-        return t;
-    }
-
-    // What share of the page is revealed right now, read off the DOM (0–100).
-    function computePageR() {
-        const page = document.getElementById('mushaf-page');
-        if (!page) return 0;
-        const frags = page.querySelectorAll('.mf-verse');
-        let total = 0, shown = 0;
-        frags.forEach(f => {
-            const w = Math.max(1, f.getBoundingClientRect().width);
-            total += w;
-            if (!f.classList.contains('covered')) { shown += w; return; }
-            const cv = f.querySelector('.mf-cover');
-            const cp = cv && cv.style ? cv.style.clipPath : '';
-            if (cp && cp.indexOf('inset') === 0) {
-                // "inset(0 X% 0 0)" clips X% from the RIGHT → (100-X)% revealed
-                const m = cp.match(/([\d.]+)%/);
-                if (m) shown += w * (1 - parseFloat(m[1]) / 100);
-            }
-        });
-        return total ? (shown / total) * 100 : 0;
-    }
-
-    // Paint the page so exactly R% of its text is visible, in reading order.
-    function applyPageR(R) {
-        const page = document.getElementById('mushaf-page');
-        if (!page) return;
-        const frags = [...page.querySelectorAll('.mf-verse')];
-        const total = frags.reduce((s, f) => s + Math.max(1, f.getBoundingClientRect().width), 0);
-        if (!total) return;
-        R = Math.max(0, Math.min(100, R));
-        let budget = (R / 100) * total;
-        let boundaryPct = 0;
-        frags.forEach(f => {
-            const w = Math.max(1, f.getBoundingClientRect().width);
-            const cv = f.querySelector('.mf-cover');
-            if (budget >= w) {                       // fully revealed
-                f.classList.remove('covered');
-                if (cv) cv.style.clipPath = '';
-                budget -= w;
-            } else if (budget <= 0) {                // fully covered
-                f.classList.add('covered');
-                if (cv) cv.style.clipPath = '';
-            } else {                                 // straddling the boundary
-                f.classList.add('covered');
-                if (cv) cv.style.clipPath = `inset(0 ${(1 - budget / w) * 100}% 0 0)`;
-                boundaryPct = (budget / w) * 100;
-                budget = 0;
-            }
-        });
-        mushafSliderKey = null;
-        mushafRevealPct = Math.round(boundaryPct);
-        mushafClozeMode = R >= 100 ? 'all' : 'cloze';
-        updateModeBtns();
-        // keep the on-screen slider knob near the boundary fragment so it never
-        // looks stale after a key press (the slider itself still works per-ayah)
-        const sl = page.querySelector('.mf-reveal-slider');
-        if (sl && sl.value !== String(mushafRevealPct)) sl.value = String(mushafRevealPct);
-    }
-
-    function resetPageRToCovered() {
-        applyPageR(0);
-        clearAllCoverClips();
-        mushafClozeMode = 'cloze';
-        updateModeBtns();
-    }
-
-    let pageRFullHold = false;      // reached 100% during this hold (Q8a)
-    let pageKeyTimer = null, pageKeyInterval = null, pageKeyDir = 0, pageKeyHeld = false;
-
-    function pageRStep(delta) {
-        const R = computePageR() + delta;
-        if (R >= 100) { applyPageR(100); pageRFullHold = true; return; }   // 4b
-        applyPageR(Math.max(0, R));                                        // 0% stops
-    }
-
-    function pageKeyStart(dir) {
-        if (pageKeyHeld) return;
-        if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
-        pageKeyHeld = true;
-        pageKeyDir = dir;
-        // a short press is a TAP: applied on keyup. Holding past PAGE_HOLD_DELAY
-        // switches to the fine hold step — so a hold never starts with a 2% jump.
-        pageKeyTimer = setTimeout(() => {
-            pageKeyTimer = null;
-            if (pageRFullHold) return;
-            pageRStep(dir * mushafHoldStep);
-            pageKeyInterval = setInterval(() => {
-                if (pageRFullHold) return;              // ignore until release
-                pageRStep(pageKeyDir * mushafHoldStep);
-            }, PAGE_HOLD_EVERY);
-        }, PAGE_HOLD_DELAY);
-    }
-
-    function pageKeyEnd() {
-        if (!pageKeyHeld) return;
-        pageKeyHeld = false;
-        const wasTap = !!pageKeyTimer;
-        if (pageKeyTimer) { clearTimeout(pageKeyTimer); pageKeyTimer = null; }
-        if (pageKeyInterval) { clearInterval(pageKeyInterval); pageKeyInterval = null; }
-        if (wasTap) pageRStep(pageKeyDir * mushafTapStep);          // the tap
-        if (pageRFullHold) { pageRFullHold = false; resetPageRToCovered(); }
-    }
-
-    // Slider / Space / taps repaint the covers with the per-ayah engine; R is
-    // derived from the DOM on every keypress, so nothing needs syncing here.
-
-    function setTapStep(v, persist) {
-        const n = parseFloat(v);
-        mushafTapStep = (!isNaN(n) && n >= 1 && n <= 20) ? n : 2;
-        const el = document.getElementById('set-tap-step');
-        if (el && parseFloat(el.value) !== mushafTapStep) el.value = mushafTapStep;
-        const lab = document.getElementById('tap-step-val');
-        if (lab) lab.textContent = mushafTapStep + '%';
-        if (persist) { try { localStorage.setItem('qp_tap_step', String(mushafTapStep)); } catch (e) {} }
-    }
-
-    function setHoldStep(v, persist) {
-        const n = parseFloat(v);
-        mushafHoldStep = (!isNaN(n) && n >= 0.1 && n <= 5) ? Math.round(n * 10) / 10 : 0.5;
-        const el = document.getElementById('set-hold-step');
-        if (el && parseFloat(el.value) !== mushafHoldStep) el.value = mushafHoldStep;
-        const lab = document.getElementById('hold-step-val');
-        if (lab) lab.textContent = mushafHoldStep + '%';
-        if (persist) { try { localStorage.setItem('qp_hold_step', String(mushafHoldStep)); } catch (e) {} }
-    }
-
     function mushafGo(dir) {
         const p = Math.min(604, Math.max(1, mushafPage + dir));
         if (p === mushafPage) return;
@@ -3790,16 +3632,11 @@
             else if (e.key === 't' || e.key === 'T') { e.preventDefault(); mushafSetHT('tail'); }
             else if (e.key === 'a' || e.key === 'A') { e.preventDefault(); mushafSetScopeExplicit('one'); }
             else if (e.key === 's' || e.key === 'S') { e.preventDefault(); mushafSetScopeExplicit('all'); }
-            // v75: these four drive the page-wide position R with tap/hold
-            else if (e.key === ',' || e.key === 'PageDown') { e.preventDefault(); pageKeyStart(1); }
-            else if (e.key === '.' || e.key === 'PageUp') { e.preventDefault(); pageKeyStart(-1); }
+            else if (e.key === ',') { e.preventDefault(); mushafSliderStep(1); }
+            else if (e.key === '.') { e.preventDefault(); mushafSliderStep(-1); }
+            else if (e.key === 'PageDown') { e.preventDefault(); mushafRevealNext(); }
+            else if (e.key === 'PageUp') { e.preventDefault(); mushafClozePrev(); }
         });
-        // v75: release ends a tap or a hold. Also fire on blur/visibility loss so
-        // a swallowed keyup can never leave the sweep running.
-        document.addEventListener('keyup', e => {
-            if (e.key === ',' || e.key === 'PageDown' || e.key === '.' || e.key === 'PageUp') pageKeyEnd();
-        });
-        window.addEventListener('blur', () => pageKeyEnd());
     })();
 
     // Fullscreen overlay: no dragging (the mushaf now replaces the whole screen)
@@ -4791,22 +4628,6 @@
                 </div>
                 <div class="set-hint">Percent of the screen width. Applies to the bottom slider and to the side rail.</div>
             </div>
-            <div class="help-section"><div class="help-title">Reveal step — tap</div>
-                <div class="set-row set-slider-row">
-                    <input type="range" id="set-tap-step" min="1" max="20" step="1" value="2"
-                           oninput="setTapStep(this.value, true)" aria-label="Tap step">
-                    <span class="set-val" id="tap-step-val">2%</span>
-                </div>
-                <div class="set-hint">How much of the whole page one press of , or . reveals.</div>
-            </div>
-            <div class="help-section"><div class="help-title">Reveal step — hold</div>
-                <div class="set-row set-slider-row">
-                    <input type="range" id="set-hold-step" min="0.1" max="5" step="0.1" value="0.5"
-                           oninput="setHoldStep(this.value, true)" aria-label="Hold step">
-                    <span class="set-val" id="hold-step-val">0.5%</span>
-                </div>
-                <div class="set-hint">Each repeat while you hold the key (every 80 ms). At 0.5% a full page takes about 16 seconds.</div>
-            </div>
             <div class="help-section"><div class="help-title">Controller test</div>
                 <div class="set-row">
                     <button type="button" class="seg-option" id="key-hud-btn" onclick="toggleKeyHud()">Show key output</button>
@@ -4842,8 +4663,7 @@
                 <div class="help-row"><code>H</code><span>Reveal verse heads (first 1/6)</span></div>
                 <div class="help-row"><code>T</code><span>Reveal verse tails (last 1/6)</span></div>
                 <div class="help-row"><code>A / S</code><span>Scope: آيَة (one ayah) / صَفْحَة (whole page)</span></div>
-                <div class="help-row"><code>, / . — tap</code><span>Reveal/hide the tap step (default 2% of the page)</span></div>
-                <div class="help-row"><code>, / . — hold</code><span>Fine sweep, hold step every 80 ms (default 0.5%)</span></div>
+                <div class="help-row"><code>, / .</code><span>Reveal slider: advance / reverse</span></div>
             </div>
             <div class="help-section"><div class="help-title">🔘 Buttons</div>
                 <div class="help-row"><code>🔒 Cloze All ↔ 👁 Reveal All</code><span>Toggle all cloze on/off</span></div>
