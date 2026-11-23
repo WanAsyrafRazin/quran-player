@@ -1743,7 +1743,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v74';
+    const APP_VERSION = 'v77';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -1860,6 +1860,7 @@
             updateLocationBar();
             applySliderLen();
             setSliderLen(mushafSliderLen, false);
+            setHoldSpeed(mushafHoldSpeed, false);
             syncMainViewUI();
             if (qpMainView === 'mushaf') restoreMainViewMushaf();
         } catch (error) {
@@ -3427,6 +3428,134 @@
         playCurrentVerse();
     }
 
+    // ── v77: HOLD sweep ─────────────────────────────────────────────────────
+    // Holding a step key moves through the ACTIVE AYAH at a constant rate in
+    // NATIVE page px (default 100 px / 200 ms = 500 px/s), advanced every frame
+    // so it reads as continuous motion. On reaching 100% the ayah is committed
+    // and the sweep continues into the NEXT ayah — one ayah open at a time, so
+    // this is still the v74 per-ayah model, only the rate is constant.
+    let mushafHoldSpeed = (function () {
+        try {
+            const v = parseInt(localStorage.getItem('qp_hold_speed') || '100', 10);
+            return (v >= 20 && v <= 400) ? v : 100;
+        } catch (e) { return 100; }
+    })();
+    const HOLD_START_DELAY = 300;      // ms before a held key starts sweeping
+    let holdActive = false, holdDir = 0, holdRaf = null, holdLast = 0, holdTimer = null;
+
+    // native page px → rendered px (the coords are a fixed 1120/1340-wide space)
+    function nativeToDomPx(px) {
+        const img = document.querySelector('.mf-classic img');
+        const card = document.querySelector('.mf-classic');
+        if (!img || !card) return px;
+        return px * (card.getBoundingClientRect().width / (img.naturalWidth || 1120));
+    }
+
+    function holdCommitActive() {
+        const page = document.getElementById('mushaf-page');
+        const covered = [...page.querySelectorAll('.mf-verse.covered')];
+        if (!covered.length) return false;
+        const key = covered[0].dataset.vkey;
+        clearAllCoverClips();
+        page.querySelectorAll(`.mf-verse[data-vkey="${key}"]`).forEach(v => v.classList.remove('covered'));
+        mushafRevealPct = 0;
+        mushafSliderKey = null;
+        if (!page.querySelector('.mf-verse.covered')) {
+            mushafClozeMode = 'all';       // do NOT touch mushafHTMode (v49 rule)
+            updateModeBtns();
+        }
+        applyMushafReveal();
+        return !!page.querySelector('.mf-verse.covered');   // false → page finished
+    }
+
+    function holdStepFwd(dPct) {
+        const page = document.getElementById('mushaf-page');
+        if (!page.querySelector('.mf-verse.covered')) return false;
+        mushafRevealPct = Math.min(100, (mushafRevealPct || 0) + dPct);
+        applyMushafReveal();
+        if (mushafRevealPct >= 100) return holdCommitActive();
+        return true;
+    }
+
+    function holdStepBack(dPct) {
+        const page = document.getElementById('mushaf-page');
+        const pct = mushafRevealPct || 0;
+        if (pct > 0) {
+            mushafRevealPct = Math.max(0, pct - dPct);
+            applyMushafReveal();
+            return true;
+        }
+        // at 0 → re-cover the PREVIOUS ayah and continue back through it
+        const keys = [...new Set([...page.querySelectorAll('.mf-verse')].map(v => v.dataset.vkey))];
+        const covered = [...page.querySelectorAll('.mf-verse.covered')];
+        const activeKey = covered.length ? covered[0].dataset.vkey : null;
+        const ai = activeKey ? keys.indexOf(activeKey) : keys.length;
+        const prevKey = ai > 0 ? keys[ai - 1] : null;
+        if (!prevKey) return false;                      // first ayah of the page
+        clearAllCoverClips();
+        page.querySelectorAll(`.mf-verse[data-vkey="${prevKey}"]`).forEach(v => v.classList.add('covered'));
+        mushafRevealPct = Math.max(0, 100 - dPct);
+        mushafClozeMode = 'cloze';
+        updateModeBtns();
+        applyMushafReveal();
+        return true;
+    }
+
+    function holdFrame(ts) {
+        if (!holdActive) return;
+        if (!document.getElementById('mushaf-panel').classList.contains('visible')) { holdStop(); return; }
+        if (!holdLast) holdLast = ts;
+        let dt = ts - holdLast;
+        holdLast = ts;
+        if (dt > 100) dt = 100;                          // tab-switch / jank clamp
+        const page = document.getElementById('mushaf-page');
+        const keys = [...new Set([...page.querySelectorAll('.mf-verse')].map(v => v.dataset.vkey))];
+        const covered = [...page.querySelectorAll('.mf-verse.covered')];
+        // the ayah we are currently moving through: first covered, or the last
+        // ayah when reversing from a fully-revealed page
+        const wKey = covered.length ? covered[0].dataset.vkey
+                                   : (holdDir < 0 ? keys[keys.length - 1] : null);
+        if (!wKey) { holdStop(); return; }
+        let w = 0;
+        page.querySelectorAll(`.mf-verse[data-vkey="${wKey}"]`).forEach(f => {
+            w += Math.max(1, f.getBoundingClientRect().width);
+        });
+        if (!w) { holdStop(); return; }
+        const domPxPerMs = nativeToDomPx(mushafHoldSpeed / 200);
+        const dPct = (domPxPerMs * dt / w) * 100;
+        const ok = holdDir > 0 ? holdStepFwd(dPct) : holdStepBack(dPct);
+        if (!ok) { holdStop(); return; }                 // page end / first ayah
+        holdRaf = requestAnimationFrame(holdFrame);
+    }
+
+    function holdStart(dir) {
+        holdStop();
+        holdDir = dir;
+        holdTimer = setTimeout(() => {
+            holdTimer = null;
+            holdActive = true;
+            holdLast = 0;
+            holdRaf = requestAnimationFrame(holdFrame);
+        }, HOLD_START_DELAY);
+    }
+
+    function holdStop() {
+        if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+        holdActive = false;
+        holdLast = 0;
+        if (holdRaf) { cancelAnimationFrame(holdRaf); holdRaf = null; }
+    }
+
+    function setHoldSpeed(v, persist) {
+        const n = parseInt(v, 10);
+        mushafHoldSpeed = (!isNaN(n) && n >= 20 && n <= 400) ? n : 100;
+        const el = document.getElementById('set-hold-speed');
+        if (el && parseInt(el.value, 10) !== mushafHoldSpeed) el.value = mushafHoldSpeed;
+        const lab = document.getElementById('hold-speed-val');
+        if (lab) lab.textContent = mushafHoldSpeed + '';
+        if (persist) { try { localStorage.setItem('qp_hold_speed', String(mushafHoldSpeed)); } catch (e) {} }
+    }
+
     function mushafGo(dir) {
         const p = Math.min(604, Math.max(1, mushafPage + dir));
         if (p === mushafPage) return;
@@ -3632,11 +3761,17 @@
             else if (e.key === 't' || e.key === 'T') { e.preventDefault(); mushafSetHT('tail'); }
             else if (e.key === 'a' || e.key === 'A') { e.preventDefault(); mushafSetScopeExplicit('one'); }
             else if (e.key === 's' || e.key === 'S') { e.preventDefault(); mushafSetScopeExplicit('all'); }
-            else if (e.key === ',') { e.preventDefault(); mushafSliderStep(1); }
-            else if (e.key === '.') { e.preventDefault(); mushafSliderStep(-1); }
-            else if (e.key === 'PageDown') { e.preventDefault(); mushafRevealNext(); }
-            else if (e.key === 'PageUp') { e.preventDefault(); mushafClozePrev(); }
+            // v77: tap keeps the v74 step; the press also arms the HOLD sweep
+            else if (e.key === ',') { e.preventDefault(); if (!e.repeat) { mushafSliderStep(1); holdStart(1); } }
+            else if (e.key === '.') { e.preventDefault(); if (!e.repeat) { mushafSliderStep(-1); holdStart(-1); } }
+            else if (e.key === 'PageDown') { e.preventDefault(); if (!e.repeat) { mushafRevealNext(); holdStart(1); } }
+            else if (e.key === 'PageUp') { e.preventDefault(); if (!e.repeat) { mushafClozePrev(); holdStart(-1); } }
         });
+        // release (or losing focus) ends the sweep
+        document.addEventListener('keyup', e => {
+            if (e.key === ',' || e.key === '.' || e.key === 'PageDown' || e.key === 'PageUp') holdStop();
+        });
+        window.addEventListener('blur', () => holdStop());
     })();
 
     // Fullscreen overlay: no dragging (the mushaf now replaces the whole screen)
@@ -4628,6 +4763,14 @@
                 </div>
                 <div class="set-hint">Percent of the screen width. Applies to the bottom slider and to the side rail.</div>
             </div>
+            <div class="help-section"><div class="help-title">Hold speed</div>
+                <div class="set-row set-slider-row">
+                    <input type="range" id="set-hold-speed" min="20" max="400" step="10" value="100"
+                           oninput="setHoldSpeed(this.value, true)" aria-label="Hold speed">
+                    <span class="set-val" id="hold-speed-val">100</span>
+                </div>
+                <div class="set-hint">Pixels revealed per 200 ms while a key is held (100 = 500 px/s, a whole page in about 33 s). Taps still step 6% of the ayah.</div>
+            </div>
             <div class="help-section"><div class="help-title">Controller test</div>
                 <div class="set-row">
                     <button type="button" class="seg-option" id="key-hud-btn" onclick="toggleKeyHud()">Show key output</button>
@@ -4663,7 +4806,8 @@
                 <div class="help-row"><code>H</code><span>Reveal verse heads (first 1/6)</span></div>
                 <div class="help-row"><code>T</code><span>Reveal verse tails (last 1/6)</span></div>
                 <div class="help-row"><code>A / S</code><span>Scope: آيَة (one ayah) / صَفْحَة (whole page)</span></div>
-                <div class="help-row"><code>, / .</code><span>Reveal slider: advance / reverse</span></div>
+                <div class="help-row"><code>, / . — tap</code><span>Advance / reverse one step (6% of the ayah)</span></div>
+                <div class="help-row"><code>, / . — hold</code><span>Sweep slowly at the hold speed (default 100 px / 200 ms)</span></div>
             </div>
             <div class="help-section"><div class="help-title">🔘 Buttons</div>
                 <div class="help-row"><code>🔒 Cloze All ↔ 👁 Reveal All</code><span>Toggle all cloze on/off</span></div>
