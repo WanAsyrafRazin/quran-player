@@ -1743,7 +1743,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v75';
+    const APP_VERSION = 'v76';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -1860,8 +1860,7 @@
             updateLocationBar();
             applySliderLen();
             setSliderLen(mushafSliderLen, false);
-            setTapStep(mushafTapStep, false);
-            setHoldStep(mushafHoldStep, false);
+            setStepPx(mushafStepPx, false);
             syncMainViewUI();
             if (qpMainView === 'mushaf') restoreMainViewMushaf();
         } catch (error) {
@@ -2027,22 +2026,18 @@
             return (v >= 20 && v <= 100) ? v : 33;
         } catch (e) { return 33; }
     })();
-    // v75: reveal steps, both as a percentage of the WHOLE PAGE's text width
-    // (page 31 = 5234px, so 1% ≈ 52px). Tap = one press; hold = each repeat.
-    let mushafTapStep = (function () {
+    // v76: ONE constant step, in NATIVE page pixels (the coords' own 1120-wide space),
+    // so a press always moves the same physical distance across the page regardless of
+    // ayah length or screen size. 139 px = the shortest ayah in the Quran (3:1) and
+    // ~12.7% of a 1092 px text line.
+    let mushafStepPx = (function () {
         try {
-            const v = parseFloat(localStorage.getItem('qp_tap_step') || '2');
-            return (v >= 1 && v <= 20) ? v : 2;
-        } catch (e) { return 2; }
+            const v = parseFloat(localStorage.getItem('qp_step_px') || '139');
+            return (v >= 40 && v <= 500) ? v : 139;
+        } catch (e) { return 139; }
     })();
-    let mushafHoldStep = (function () {
-        try {
-            const v = parseFloat(localStorage.getItem('qp_hold_step') || '0.5');
-            return (v >= 0.1 && v <= 5) ? v : 0.5;
-        } catch (e) { return 0.5; }
-    })();
-    const PAGE_HOLD_DELAY = 250;   // ms before a press becomes a hold
-    const PAGE_HOLD_EVERY = 80;    // ms between hold steps (0.5% → ~16s per page)
+    const PAGE_HOLD_DELAY = 350;   // ms before a held key starts repeating
+    const PAGE_HOLD_EVERY = 40;    // ms between repeats (same 139 px each)
     // v58: 'plain' (QCF text) | 'madani' (Madani Mushaf 1421 pages) | 'tajweed' (Tajweed Mushaf pages).
     // Both image editions are the SAME source the Quran-for-Android app uses: page PNGs
     // plus per-edition ayah geometry regenerated from that app's ayahinfo_<W>.db databases.
@@ -3528,9 +3523,22 @@
     let pageRFullHold = false;      // reached 100% during this hold (Q8a)
     let pageKeyTimer = null, pageKeyInterval = null, pageKeyDir = 0, pageKeyHeld = false;
 
-    function pageRStep(delta) {
-        const R = computePageR() + delta;
-        if (R >= 100) { applyPageR(100); pageRFullHold = true; return; }   // 4b
+    // deltaPx is in NATIVE page px (1120 for Madani, 1340 for Tajweed); the DOM
+    // measures rendered px, so scale through the page image's natural width —
+    // otherwise the same 139 px stroke would be ~3x too big on a phone.
+    function nativeToDomPx(px) {
+        const img = document.querySelector('.mf-classic img');
+        const card = document.querySelector('.mf-classic');
+        if (!img || !card) return px;
+        const nw = img.naturalWidth || 1120;
+        return px * (card.getBoundingClientRect().width / nw);
+    }
+
+    function pageRStep(deltaPx) {
+        const total = pageTotalWidth();
+        if (!total) return;
+        const R = computePageR() + (nativeToDomPx(deltaPx) / total) * 100;
+        if (R >= 100) { applyPageR(100); pageRFullHold = true; return; }   // latch at the end
         applyPageR(Math.max(0, R));                                        // 0% stops
     }
 
@@ -3539,15 +3547,14 @@
         if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
         pageKeyHeld = true;
         pageKeyDir = dir;
-        // a short press is a TAP: applied on keyup. Holding past PAGE_HOLD_DELAY
-        // switches to the fine hold step — so a hold never starts with a 2% jump.
+        // v76: the press steps IMMEDIATELY (tap and hold do the same 139 px), then
+        // holding past PAGE_HOLD_DELAY keeps repeating that same step.
+        if (!pageRFullHold) pageRStep(dir * mushafStepPx);
         pageKeyTimer = setTimeout(() => {
             pageKeyTimer = null;
-            if (pageRFullHold) return;
-            pageRStep(dir * mushafHoldStep);
             pageKeyInterval = setInterval(() => {
                 if (pageRFullHold) return;              // ignore until release
-                pageRStep(pageKeyDir * mushafHoldStep);
+                pageRStep(pageKeyDir * mushafStepPx);
             }, PAGE_HOLD_EVERY);
         }, PAGE_HOLD_DELAY);
     }
@@ -3555,34 +3562,23 @@
     function pageKeyEnd() {
         if (!pageKeyHeld) return;
         pageKeyHeld = false;
-        const wasTap = !!pageKeyTimer;
         if (pageKeyTimer) { clearTimeout(pageKeyTimer); pageKeyTimer = null; }
         if (pageKeyInterval) { clearInterval(pageKeyInterval); pageKeyInterval = null; }
-        if (wasTap) pageRStep(pageKeyDir * mushafTapStep);          // the tap
+        // reached the end while holding → you saw the full page, now it resets
         if (pageRFullHold) { pageRFullHold = false; resetPageRToCovered(); }
     }
 
     // Slider / Space / taps repaint the covers with the per-ayah engine; R is
     // derived from the DOM on every keypress, so nothing needs syncing here.
 
-    function setTapStep(v, persist) {
-        const n = parseFloat(v);
-        mushafTapStep = (!isNaN(n) && n >= 1 && n <= 20) ? n : 2;
-        const el = document.getElementById('set-tap-step');
-        if (el && parseFloat(el.value) !== mushafTapStep) el.value = mushafTapStep;
-        const lab = document.getElementById('tap-step-val');
-        if (lab) lab.textContent = mushafTapStep + '%';
-        if (persist) { try { localStorage.setItem('qp_tap_step', String(mushafTapStep)); } catch (e) {} }
-    }
-
-    function setHoldStep(v, persist) {
-        const n = parseFloat(v);
-        mushafHoldStep = (!isNaN(n) && n >= 0.1 && n <= 5) ? Math.round(n * 10) / 10 : 0.5;
-        const el = document.getElementById('set-hold-step');
-        if (el && parseFloat(el.value) !== mushafHoldStep) el.value = mushafHoldStep;
-        const lab = document.getElementById('hold-step-val');
-        if (lab) lab.textContent = mushafHoldStep + '%';
-        if (persist) { try { localStorage.setItem('qp_hold_step', String(mushafHoldStep)); } catch (e) {} }
+    function setStepPx(v, persist) {
+        const n = parseInt(v, 10);
+        mushafStepPx = (!isNaN(n) && n >= 40 && n <= 500) ? n : 139;
+        const el = document.getElementById('set-step-px');
+        if (el && parseInt(el.value, 10) !== mushafStepPx) el.value = mushafStepPx;
+        const lab = document.getElementById('step-px-val');
+        if (lab) lab.textContent = mushafStepPx + ' px';
+        if (persist) { try { localStorage.setItem('qp_step_px', String(mushafStepPx)); } catch (e) {} }
     }
 
     function mushafGo(dir) {
@@ -4791,21 +4787,13 @@
                 </div>
                 <div class="set-hint">Percent of the screen width. Applies to the bottom slider and to the side rail.</div>
             </div>
-            <div class="help-section"><div class="help-title">Reveal step — tap</div>
+            <div class="help-section"><div class="help-title">Reveal step</div>
                 <div class="set-row set-slider-row">
-                    <input type="range" id="set-tap-step" min="1" max="20" step="1" value="2"
-                           oninput="setTapStep(this.value, true)" aria-label="Tap step">
-                    <span class="set-val" id="tap-step-val">2%</span>
+                    <input type="range" id="set-step-px" min="40" max="500" step="1" value="139"
+                           oninput="setStepPx(this.value, true)" aria-label="Reveal step in pixels">
+                    <span class="set-val" id="step-px-val">139 px</span>
                 </div>
-                <div class="set-hint">How much of the whole page one press of , or . reveals.</div>
-            </div>
-            <div class="help-section"><div class="help-title">Reveal step — hold</div>
-                <div class="set-row set-slider-row">
-                    <input type="range" id="set-hold-step" min="0.1" max="5" step="0.1" value="0.5"
-                           oninput="setHoldStep(this.value, true)" aria-label="Hold step">
-                    <span class="set-val" id="hold-step-val">0.5%</span>
-                </div>
-                <div class="set-hint">Each repeat while you hold the key (every 80 ms). At 0.5% a full page takes about 16 seconds.</div>
+                <div class="set-hint">How far one press of , or . moves through the page, in page pixels. 139 px is about an eighth of a line. Holding repeats the same step.</div>
             </div>
             <div class="help-section"><div class="help-title">Controller test</div>
                 <div class="set-row">
@@ -4842,8 +4830,7 @@
                 <div class="help-row"><code>H</code><span>Reveal verse heads (first 1/6)</span></div>
                 <div class="help-row"><code>T</code><span>Reveal verse tails (last 1/6)</span></div>
                 <div class="help-row"><code>A / S</code><span>Scope: آيَة (one ayah) / صَفْحَة (whole page)</span></div>
-                <div class="help-row"><code>, / . — tap</code><span>Reveal/hide the tap step (default 2% of the page)</span></div>
-                <div class="help-row"><code>, / . — hold</code><span>Fine sweep, hold step every 80 ms (default 0.5%)</span></div>
+                <div class="help-row"><code>, / .</code><span>Reveal / hide the next 139 px of the page · hold to repeat</span></div>
             </div>
             <div class="help-section"><div class="help-title">🔘 Buttons</div>
                 <div class="help-row"><code>🔒 Cloze All ↔ 👁 Reveal All</code><span>Toggle all cloze on/off</span></div>
