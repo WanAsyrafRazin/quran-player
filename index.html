@@ -549,8 +549,26 @@
         .mf-classic > .mf-verse .mf-cover {
             top: 0;
             transform: none;
-            height: 76%;
+            /* v81: the ayahinfo line bands are CONTIGUOUS (each band starts where the
+               previous one ends), so at 76% the bottom 24% of every band was left
+               uncovered — that is the glyph-ink leak. 102% makes each box meet the
+               next band's top with a 2px overlap against sub-pixel seams. */
+            height: 102%;
             max-height: none;
+            /* padding must be INSIDE the 102% — content-box added 4px and overshot to 1.14x */
+            box-sizing: border-box;
+            /* fused rows: round the top only, so consecutive boxes join cleanly */
+            border-radius: 7px 7px 0 0;
+            /* no bottom bevel / bottom ring (they would draw a bright line at every
+               join); the inset top shadow and a top hairline are kept */
+            box-shadow:
+                inset 0 2px 3px rgba(90, 60, 20, .28),
+                0 -1px 0 rgba(120, 90, 30, .14);
+        }
+        body.dark-mode .mf-classic > .mf-verse .mf-cover {
+            box-shadow:
+                inset 0 2px 3px rgba(0, 0, 0, .65),
+                0 -1px 0 rgba(255, 255, 255, .06);
         }
         /* v60: the scanned page must not be selectable / draggable / long-press-saveable;
            taps fall through the image to the per-ayah rects (and to classicTap). */
@@ -1795,7 +1813,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v80';
+    const APP_VERSION = 'v81';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
