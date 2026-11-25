@@ -1819,7 +1819,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v82';
+    const APP_VERSION = 'v84';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -3721,7 +3721,19 @@
         const coveredEls = [...page.querySelectorAll('.mf-verse.covered')];
 
         if (dir > 0) {
-            if (!coveredEls.length) return;                 // page fully revealed → inert
+            if (!coveredEls.length) {
+                // v84: page fully revealed → start the loop over, exactly like Space does.
+                // clearAllCoverClips() also drops mushafSliderKey, so a stale slider clip
+                // cannot survive the reset. The next B press reveals the first line again.
+                clearAllCoverClips();
+                keys.forEach(k => page.querySelectorAll(`.mf-verse[data-vkey="${k}"]`)
+                    .forEach(v => v.classList.add('covered')));
+                mushafRevealPct = 0;
+                mushafClozeMode = 'cloze';
+                updateModeBtns();
+                applyMushafReveal();
+                return;
+            }
             const key = coveredEls[0].dataset.vkey;
             const info = lineStepInfo(key);
             let idx = info.ends.findIndex(e => e > info.shown + 0.5);
@@ -5127,7 +5139,7 @@
             </div>
             <div class="help-section"><div class="help-title">🧠 Study (cloze)</div>
                 <div class="help-row"><code>Space</code><span>Reveal the whole next ayah</span></div>
-                <div class="help-row"><code>B / Shift+B</code><span>Reveal / re-cover one LINE of the ayah</span></div>
+                <div class="help-row"><code>B / Shift+B</code><span>Reveal / re-cover one LINE of the ayah (at the page end, B re-clozes the whole page)</span></div>
                 <div class="help-row"><code>▼ / ▲</code><span>Cloze verses from top / bottom</span></div>
                 <div class="help-row"><code>M</code><span>Cloze everything except the middle band</span></div>
                 <div class="help-row"><code>H</code><span>Reveal verse heads (first 1/6)</span></div>
