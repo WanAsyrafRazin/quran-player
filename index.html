@@ -1480,6 +1480,44 @@
         .set-slider-row input[type=range] { flex: 1 1 auto; min-width: 0; accent-color: #A9803B; }
         .set-val { font-size: 12px; font-weight: 700; color: #A9803B; min-width: 38px; text-align: right; }
         #main-view-seg { width: 100%; }
+        /* v79: page wheel picker */
+        #page-wheel-overlay { align-items: flex-end; padding: 0; }
+        .page-wheel-sheet {
+            width: 100%; max-width: 420px; margin: 0 auto;
+            background: #FDFBF4; border-radius: 16px 16px 0 0;
+            box-shadow: 0 -12px 40px rgba(0,0,0,.32);
+            transform: translateY(100%); transition: transform .22s ease;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        #page-wheel-overlay.visible .page-wheel-sheet { transform: translateY(0); }
+        body.dark-mode .page-wheel-sheet { background: #1A232E; }
+        .pw-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px 4px; }
+        .pw-caption { font-size: 12px; font-weight: 700; color: #2D3748; }
+        body.dark-mode .pw-caption { color: #E2E8F0; }
+        .pw-body { position: relative; height: 204px; overflow: hidden; }
+        .pw-body::before, .pw-body::after {
+            content: ''; position: absolute; left: 0; right: 0; height: 70px; pointer-events: none; z-index: 2;
+        }
+        .pw-body::before { top: 0; background: linear-gradient(#FDFBF4, rgba(253,251,244,0)); }
+        .pw-body::after { bottom: 0; background: linear-gradient(rgba(253,251,244,0), #FDFBF4); }
+        body.dark-mode .pw-body::before { background: linear-gradient(#1A232E, rgba(26,35,46,0)); }
+        body.dark-mode .pw-body::after { background: linear-gradient(rgba(26,35,46,0), #1A232E); }
+        .pw-wheel {
+            height: 204px; overflow-y: scroll; scroll-snap-type: y mandatory;
+            -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 85px 0;
+        }
+        .pw-wheel::-webkit-scrollbar { display: none; }
+        .pw-item {
+            height: 34px; line-height: 34px; text-align: center; scroll-snap-align: center;
+            font-size: 17px; color: #718096; font-variant-numeric: tabular-nums;
+        }
+        body.dark-mode .pw-item { color: #7E8C9B; }
+        .pw-item.sel { color: #2D3748; font-weight: 800; font-size: 20px; }
+        body.dark-mode .pw-item.sel { color: #EDF2F7; }
+        .pw-foot { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px 14px; gap: 10px; }
+        .pw-link { background: none; border: none; color: #2B6CB0; font-size: 12px; font-weight: 700; padding: 8px 2px; }
+        body.dark-mode .pw-link { color: #63B3ED; }
+        .pw-go { background: #A9803B; color: #fff; border: none; border-radius: 10px; padding: 9px 24px; font-size: 14px; font-weight: 700; }
         /* v74: controller key HUD — shows what a Bluetooth remote actually sends */
         .key-hud {
             position: fixed; left: 10px; bottom: 10px; z-index: 100001;
@@ -1687,7 +1725,7 @@
         </div>
         <div class="mushaf-float-controls">
             <label class="mushaf-pagelabel" title="Go to page">📄
-                <input type="number" id="mushaf-page-input" class="mushaf-page-input" min="1" max="604" inputmode="numeric" aria-label="Page number">
+                <input type="number" id="mushaf-page-input" class="mushaf-page-input" min="1" max="604" inputmode="numeric" readonly onclick="openPageWheel()" aria-label="Page number (tap to choose)">
                 <button type="button" class="mushaf-go" id="mushaf-go-btn">Go</button>
             </label>
             <div class="mushaf-mode-group" id="mushaf-mode-group">
@@ -1743,7 +1781,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v78';
+    const APP_VERSION = 'v79';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -3578,6 +3616,149 @@
         if (persist) { try { localStorage.setItem('qp_hold_speed', String(mushafHoldSpeed)); } catch (e) {} }
     }
 
+    // ── v79 (A): B = reveal ONE LINE; Shift+B = re-cover one line ───────────
+    // Works on the ACTIVE ayah's own line fragments (the coords' rects), so a press
+    // always completes a whole line and never lands mid-line. The last fragment
+    // completes the ayah; the next B starts the NEXT ayah's first line.
+    function lineStepInfo(key) {
+        const page = document.getElementById('mushaf-page');
+        const frags = [...page.querySelectorAll(`.mf-verse[data-vkey="${key}"]`)];
+        const widths = frags.map(f => Math.max(1, f.getBoundingClientRect().width));
+        const total = widths.reduce((a, b) => a + b, 0) || 1;
+        let shown = 0;
+        if (mushafSliderKey === key) shown = (mushafRevealPct || 0) / 100 * total;
+        else if (frags.length && !frags[0].classList.contains('covered')) shown = total;
+        const ends = [];
+        let acc = 0;
+        widths.forEach(w => { acc += w; ends.push(acc); });
+        return { frags, total, shown, ends };
+    }
+
+    function mushafLineStep(dir) {
+        const page = document.getElementById('mushaf-page');
+        if (!page) return;
+        const keys = [...new Set([...page.querySelectorAll('.mf-verse')].map(v => v.dataset.vkey))];
+        if (!keys.length) return;
+        const coveredEls = [...page.querySelectorAll('.mf-verse.covered')];
+
+        if (dir > 0) {
+            if (!coveredEls.length) return;                 // page fully revealed → inert
+            const key = coveredEls[0].dataset.vkey;
+            const info = lineStepInfo(key);
+            let idx = info.ends.findIndex(e => e > info.shown + 0.5);
+            if (idx < 0) idx = info.frags.length - 1;
+            const target = info.ends[idx];
+            if (target >= info.total - 0.5) { holdCommitActive(); return; }  // last line → commit
+            mushafSliderKey = key;
+            mushafRevealPct = (target / info.total) * 100;
+            applyMushafReveal();
+            return;
+        }
+
+        // reverse: re-cover the last shown line of the active ayah
+        const key = coveredEls.length ? coveredEls[0].dataset.vkey : keys[keys.length - 1];
+        const info = lineStepInfo(key);
+        let k = info.ends.findIndex(e => e > info.shown + 0.5);
+        if (k < 0) k = info.frags.length;                   // every line shown
+        if (k >= 1) {
+            const target = k >= 2 ? info.ends[k - 2] : 0;
+            info.frags.forEach(f => f.classList.add('covered'));
+            mushafSliderKey = key;
+            mushafRevealPct = (target / info.total) * 100;
+            mushafClozeMode = 'cloze';
+            updateModeBtns();
+            applyMushafReveal();
+            return;
+        }
+        // nothing shown here → step back into the PREVIOUS ayah, its last line covered
+        const ai = keys.indexOf(key);
+        if (ai <= 0) return;                                // first ayah of the page
+        const prev = lineStepInfo(keys[ai - 1]);
+        const n = prev.frags.length;
+        clearAllCoverClips();
+        prev.frags.forEach(f => f.classList.add('covered'));
+        mushafSliderKey = keys[ai - 1];
+        mushafRevealPct = (((n >= 2 ? prev.ends[n - 2] : 0) / prev.total) * 100);
+        mushafClozeMode = 'cloze';
+        updateModeBtns();
+        applyMushafReveal();
+    }
+
+    // ── v79 (B): page wheel picker ──────────────────────────────────────────
+    const PW_ROW = 34;              // must match --pw-row / .pw-item height in CSS
+    let pwSelected = 1;
+
+    function openPageWheel() {
+        const ov = document.getElementById('page-wheel-overlay');
+        const wheel = document.getElementById('pw-wheel');
+        if (!ov || !wheel) return;
+        if (!wheel.childElementCount) {
+            let html = '';
+            for (let p = 1; p <= 604; p++) html += `<div class="pw-item" data-p="${p}">${p}</div>`;
+            wheel.innerHTML = html;
+            wheel.addEventListener('scroll', onWheelScroll, { passive: true });
+        }
+        ov.classList.add('visible');
+        // NOTE: the vertical padding lives in CSS (85px = (204-34)/2). Computing it
+        // here read clientHeight while the sheet was still translateY(100%), got 0,
+        // and left the wheel two rows off-centre. Wait for layout instead.
+        const centre = () => {
+            wheel.scrollTop = (mushafPage - 1) * PW_ROW;
+            pwSelected = mushafPage;
+            [...wheel.children].forEach(el => el.classList.toggle('sel', +el.dataset.p === mushafPage));
+            updateWheelCaption(mushafPage);
+        };
+        requestAnimationFrame(() => requestAnimationFrame(centre));
+    }
+
+    function onWheelScroll() {
+        const wheel = document.getElementById('pw-wheel');
+        if (!wheel) return;
+        const p = Math.min(604, Math.max(1, Math.round(wheel.scrollTop / PW_ROW) + 1));
+        if (p === pwSelected) return;
+        pwSelected = p;
+        [...wheel.children].forEach(el => el.classList.toggle('sel', +el.dataset.p === p));
+        updateWheelCaption(p);
+    }
+
+    function updateWheelCaption(p) {
+        const cap = document.getElementById('pw-caption');
+        if (!cap) return;
+        let txt = 'Page ' + p;
+        try {
+            const { first, last } = pageInfo(p);
+            if (first && last) {
+                const range = first.surahNum === last.surahNum
+                    ? `${first.surahName} ${first.ayahNum}\u2013${last.ayahNum}`
+                    : `${first.surahName} ${first.ayahNum} \u2013 ${last.surahName} ${last.ayahNum}`;
+                txt = `Page ${p} \u00b7 Juz ${first.juz} \u00b7 ${range}`;
+            }
+        } catch (e) {}
+        cap.textContent = txt;
+    }
+
+    function closePageWheel() {
+        const ov = document.getElementById('page-wheel-overlay');
+        if (ov) ov.classList.remove('visible');
+    }
+
+    function commitWheelPage() {
+        const p = pwSelected;
+        closePageWheel();
+        showMushafPage(p);
+        mushafSyncAudioToPage(p);
+    }
+
+    function wheelTypeInstead() {
+        closePageWheel();
+        const inp = document.getElementById('mushaf-page-input');
+        if (!inp) return;
+        inp.removeAttribute('readonly');
+        inp.focus();
+        inp.select();
+        inp.addEventListener('blur', () => inp.setAttribute('readonly', 'readonly'), { once: true });
+    }
+
     function mushafGo(dir) {
         const p = Math.min(604, Math.max(1, mushafPage + dir));
         if (p === mushafPage) return;
@@ -3773,6 +3954,8 @@
                 e.target.blur();
             }
             if (!document.getElementById('mushaf-panel').classList.contains('visible')) return;
+            const pwOv = document.getElementById('page-wheel-overlay');
+            if (pwOv && pwOv.classList.contains('visible')) return;   // wheel owns the keys
             if (e.key === 'ArrowLeft') { e.preventDefault(); mushafGo(1); }
             else if (e.key === 'ArrowRight') { e.preventDefault(); mushafGo(-1); }
             else if (e.key === 'ArrowDown') { e.preventDefault(); mushafClozeFromTop(); }
@@ -3786,6 +3969,7 @@
             // v77: tap keeps the v74 step; the press also arms the HOLD sweep
             else if (e.key === ',') { e.preventDefault(); if (!e.repeat) { mushafSliderStep(1); holdStart(1); } }
             else if (e.key === '.') { e.preventDefault(); if (!e.repeat) { mushafSliderStep(-1); holdStart(-1); } }
+            else if (e.code === 'KeyB') { e.preventDefault(); if (!e.repeat) mushafLineStep(e.shiftKey ? -1 : 1); }
             else if (e.key === 'PageDown') { e.preventDefault(); if (!e.repeat) { mushafRevealNext(); holdStart(1); } }
             else if (e.key === 'PageUp') { e.preventDefault(); if (!e.repeat) { mushafClozePrev(); holdStart(-1); } }
         });
@@ -4760,6 +4944,21 @@
 
 <div class="key-hud" id="key-hud"><span class="kh-val">…</span></div>
 
+<!-- Page wheel picker (v79) -->
+<div class="help-overlay" id="page-wheel-overlay" onclick="if (event.target === this) closePageWheel()">
+    <div class="page-wheel-sheet" role="dialog" aria-label="Choose page">
+        <div class="pw-head">
+            <span class="pw-caption" id="pw-caption">Page 1</span>
+            <button type="button" class="help-close" onclick="closePageWheel()" aria-label="Close">✕</button>
+        </div>
+        <div class="pw-body"><div class="pw-wheel" id="pw-wheel"></div></div>
+        <div class="pw-foot">
+            <button type="button" class="pw-link" onclick="wheelTypeInstead()">Type instead</button>
+            <button type="button" class="pw-go" id="pw-go" onclick="commitWheelPage()">Go</button>
+        </div>
+    </div>
+</div>
+
 <!-- Settings modal (v73) -->
 <div class="help-overlay" id="settings-overlay" onclick="if (event.target === this) closeSettings()">
     <div class="help-modal" role="dialog" aria-label="Settings">
@@ -4830,7 +5029,8 @@
                 <div class="help-row"><code>page number + Go</code><span>Jump to any page (1–604)</span></div>
             </div>
             <div class="help-section"><div class="help-title">🧠 Study (cloze)</div>
-                <div class="help-row"><code>Space</code><span>Reveal next ayah (one by one)</span></div>
+                <div class="help-row"><code>Space</code><span>Reveal the whole next ayah</span></div>
+                <div class="help-row"><code>B / Shift+B</code><span>Reveal / re-cover one LINE of the ayah</span></div>
                 <div class="help-row"><code>▼ / ▲</code><span>Cloze verses from top / bottom</span></div>
                 <div class="help-row"><code>M</code><span>Cloze everything except the middle band</span></div>
                 <div class="help-row"><code>H</code><span>Reveal verse heads (first 1/6)</span></div>
@@ -4869,7 +5069,7 @@
         if (o) o.classList.remove('visible');
     }
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') { closeHelp(); closeSettings(); }
+        if (e.key === 'Escape') { closeHelp(); closeSettings(); closePageWheel(); }
     });
 </script>
 
