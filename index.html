@@ -1503,6 +1503,10 @@
         body.dark-mode .pw-body::before { background: linear-gradient(#1A232E, rgba(26,35,46,0)); }
         body.dark-mode .pw-body::after { background: linear-gradient(rgba(26,35,46,0), #1A232E); }
         .pw-wheel {
+            /* v80: WITHOUT border-box the 85px vertical padding is ADDED to the
+               204px height (clientHeight read 374), which shifted every index
+               calculation and made pages 600-604 unreachable. */
+            box-sizing: border-box;
             height: 204px; overflow-y: scroll; scroll-snap-type: y mandatory;
             -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 85px 0;
         }
@@ -1514,6 +1518,16 @@
         body.dark-mode .pw-item { color: #7E8C9B; }
         .pw-item.sel { color: #2D3748; font-weight: 800; font-size: 20px; }
         body.dark-mode .pw-item.sel { color: #EDF2F7; }
+        .pw-jumps { display: flex; gap: 8px; padding: 6px 14px 0; }
+        .pw-jump {
+            flex: 1 1 0; padding: 9px 0; border-radius: 9px;
+            border: 1px solid #E2E0D6; background: #FFFFFF;
+            font-size: 12px; font-weight: 800; color: #2D3748;
+            font-variant-numeric: tabular-nums;
+        }
+        .pw-jump:active { background: #F0EDE2; }
+        body.dark-mode .pw-jump { background: #22303C; border-color: #34455A; color: #E2E8F0; }
+        body.dark-mode .pw-jump:active { background: #2C3E4E; }
         .pw-foot { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px 14px; gap: 10px; }
         .pw-link { background: none; border: none; color: #2B6CB0; font-size: 12px; font-weight: 700; padding: 8px 2px; }
         body.dark-mode .pw-link { color: #63B3ED; }
@@ -1781,7 +1795,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v79';
+    const APP_VERSION = 'v80';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -3737,6 +3751,18 @@
         cap.textContent = txt;
     }
 
+    // v80: jump by 10/100 pages. Selection updates immediately and the wheel
+    // scrolls smoothly to it (scroll-snap lands it centred).
+    function jumpWheelPages(n) {
+        const wheel = document.getElementById('pw-wheel');
+        if (!wheel) return;
+        const target = Math.min(604, Math.max(1, pwSelected + n));
+        pwSelected = target;
+        [...wheel.children].forEach(el => el.classList.toggle('sel', +el.dataset.p === target));
+        updateWheelCaption(target);
+        wheel.scrollTo({ top: (target - 1) * PW_ROW, behavior: 'smooth' });
+    }
+
     function closePageWheel() {
         const ov = document.getElementById('page-wheel-overlay');
         if (ov) ov.classList.remove('visible');
@@ -4952,6 +4978,12 @@
             <button type="button" class="help-close" onclick="closePageWheel()" aria-label="Close">✕</button>
         </div>
         <div class="pw-body"><div class="pw-wheel" id="pw-wheel"></div></div>
+        <div class="pw-jumps">
+            <button type="button" class="pw-jump" onclick="jumpWheelPages(-100)">−100</button>
+            <button type="button" class="pw-jump" onclick="jumpWheelPages(-10)">−10</button>
+            <button type="button" class="pw-jump" onclick="jumpWheelPages(10)">+10</button>
+            <button type="button" class="pw-jump" onclick="jumpWheelPages(100)">+100</button>
+        </div>
         <div class="pw-foot">
             <button type="button" class="pw-link" onclick="wheelTypeInstead()">Type instead</button>
             <button type="button" class="pw-go" id="pw-go" onclick="commitWheelPage()">Go</button>
