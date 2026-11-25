@@ -566,6 +566,12 @@
                 0 -1px 0 rgba(120, 90, 30, .14);
         }
         body.dark-mode .mf-classic > .mf-verse .mf-cover {
+            /* v82: --mf-cover-bg is sampled once, when the page renders. Toggling night
+               mode later inverts the scan but leaves that CREAM value in place, so the
+               clozed page turned into a wall of white boxes on a navy page. Set the
+               background here instead of trusting the variable. */
+            background: #1A232E;
+            color: #D9B877;
             box-shadow:
                 inset 0 2px 3px rgba(0, 0, 0, .65),
                 0 -1px 0 rgba(255, 255, 255, .06);
@@ -1813,7 +1819,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v81';
+    const APP_VERSION = 'v82';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2411,6 +2417,45 @@
     // when the next page replaces it (keeps no orphaned object URLs).
     let lastClassicBlobUrl = null;
 
+    // v82: the coords store each ayah FRAGMENT's own ink rect, so a row whose text
+    // ended mid-line produced a cover that stopped short of the text block — the row
+    // edges came out ragged (the staircase reported on pages 36 and 38). Group the
+    // fragments by line band and stretch only the OUTERMOST fragment on each band out
+    // to the block's left / right edge, so every row shares the same two edges while a
+    // two-ayah row keeps its split. Interior fragments are untouched: that is what
+    // stops a clozed box from painting over a revealed ayah on the same line.
+    function mfEqualizeBands(coords) {
+        const vers = coords.verses || {};
+        let L = Infinity, R = -Infinity;
+        for (const vkey of Object.keys(vers))
+            for (const [x, y, w] of vers[vkey]) { if (x < L) L = x; if (x + w > R) R = x + w; }
+        if (!isFinite(L) || !isFinite(R) || R <= L) return vers;
+        const out = {}, bands = new Map();   // band y -> fragments on that line
+        for (const vkey of Object.keys(vers)) {
+            out[vkey] = [];
+            for (let i = 0; i < vers[vkey].length; i++) {
+                const [x, y, w, h] = vers[vkey][i];
+                out[vkey][i] = [x, y, w, h];
+                const key = Math.round(y);
+                if (!bands.has(key)) bands.set(key, []);
+                bands.get(key).push({ vkey, i, x, w });
+            }
+        }
+        for (const list of bands.values()) {
+            list.sort((a, b) => a.x - b.x);
+            const first = list[0], last = list[list.length - 1];
+            if (first.x > L) {
+                const r = out[first.vkey][first.i];
+                out[first.vkey][first.i] = [L, r[1], r[0] + r[2] - L, r[3]];
+            }
+            if (last.x + last.w < R) {
+                const r = out[last.vkey][last.i];
+                out[last.vkey][last.i] = [r[0], r[1], R - r[0], r[3]];
+            }
+        }
+        return out;
+    }
+
     async function showClassicPage(pageEl, p, lines, fontName) {
         const { first } = pageInfo(p);
         // Saved pages (OFFLINE MODE button) live permanently in IndexedDB —
@@ -2512,8 +2557,10 @@
             // EXACT path: precomputed per-ayah coordinates → percentage-positioned
             // covers. Percentages keep the overlay locked to the image at ANY size
             // (viewport resize / rotation), matching the fixed aspect-ratio parent.
-            for (const vkey of Object.keys(coords.verses)) {
-                for (const [x, y, w, h] of coords.verses[vkey]) {
+            // v82: full-width rows — see mfEqualizeBands above.
+            const verseRects = mfEqualizeBands(coords);
+            for (const vkey of Object.keys(verseRects)) {
+                for (const [x, y, w, h] of verseRects[vkey]) {
                     coversHtml += `<span class="mf-verse" data-vkey="${vkey}" onclick="toggleVerseCloze(this)"
                         style="position:absolute;left:${(x / iw * 100).toFixed(3)}%;top:${(y / ih * 100).toFixed(3)}%;width:${(w / iw * 100).toFixed(3)}%;height:${(h / ih * 100).toFixed(3)}%;">
                         <span class="mf-cover">${toArabicDigits(vkey.split(':')[1])}</span></span>`;
