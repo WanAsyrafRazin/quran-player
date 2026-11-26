@@ -1,66 +1,55 @@
-# Handoff — from VPS Hermes (Tencent) to PC Hermes (Qwen2.5VL agent)
+# Handoff — Quran Player
 
-Date: 2026-08-15. Read this before touching the repo. Pull first!
+Last rewritten for **v84** (2026-11-26). The older handoff described v24–v35
+and a "plain mode" that no longer exists.
 
-## 1. IMPORTANT: SW cache is stale
-`sw.js` still has `const CACHE = 'quran-player-v24';` but the app is at v35.
-Users may be stuck on old cached code. **Bump the cache string on the next
-UI change** (e.g. `quran-player-v36`). Every UI change needs a bump.
+## 1. Release rule (do this every time)
+- `sw.js` `CACHE = 'quran-player-vNN'` and `index.html` `APP_VERSION = 'vNN'`
+  **must be bumped together** on every user-facing change, or installed copies
+  keep the old cached shell.
+- Check with `python3 .tools/check_version.py` (exit 1 on mismatch).
+- Optional pre-commit hook, once per clone: `git config core.hooksPath .githooks`
 
-## 2. Coordination rule
-Two Hermes agents now work on this repo (PC agent + VPS agent). Always
-`git pull` before committing, keep commits small, and push promptly so the
-other agent never builds on a stale tree.
+## 2. Coordination
+- Several agents (PC + VPS Hermes) may work on this repo: `git pull` before
+  committing, keep commits small, push promptly.
+- **The task channel is private.** Never put VPS→PC task docs in this PUBLIC
+  repo (GitHub Pages). Tasks live in the private `server-tools/tasks/`.
 
-## 2b. TASK CHANNEL IS PRIVATE (2026-08-18, user mandate)
-**Never put VPS→PC task docs in this PUBLIC repo.** Task files
-(webhook-setup, homebridge-tuya, photo-sort, future tasks) live in the
-PRIVATE repo `server-tools/tasks/` (branch `master`). quran-player is
-public (GitHub Pages) — it carries app code only. If you need to hand a
-task to the PC agent, write it to server-tools/tasks/ and push; the PC
-agent watches that folder.
-
-## 3. QCF font finding (verified, binary-level)
-The `QCF_P{NNN}.TTF` files in `quran/quran.com-images` (raw.githubusercontent)
-are **sanitized/stub fonts**:
-- Standard Arabic codepoints (U+0621–U+064A) map to identical hollow
-  rectangles (8 points, 0 off-curve).
-- The `code_v1`/`code_v2` presentation forms (U+FB50+) map to a SCRAMBLED
-  cmap — glyph names like A/B/C (Latin shapes), not Arabic. Rendering
-  `code_v1` text with these fonts produces tofu too.
-- The repo's real fonts were removed (King Fahd Complex copyright) and
-  replaced with placeholders. The morx/just tables survived, which is why
-  classic-mode coords still measure correctly.
-- quran.com's REAL font is served from their own CDN:
-  `https://quran.com/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.woff2`
-  (verified: real glyph curves, renders correctly in browser).
-
-## 4. Tajweed web-render prototype — DISCONTINUED (user rejected)
-A prototype was built (imlaei text + quran-tajweed JSON + span color
-wrapping + UthmanicHafs font, 15-line justify layout, quran.com palette).
-The user reviewed pages 1–5 and rejected it ("the result is terrible").
-**Do not pursue this approach.** Plain mode stays on the system Arabic font
-with fit-to-width; classic stays on scanned page images + precomputed coords.
-
-## 5. Working architecture (current state)
-- Plain mode: system Arabic fallback font (v24 decision — the QCF stub
-  fonts must never be loaded), fit-to-width loop, edge-pinned justify,
-  surah-final lines centered, printed frame (juz/surah/page corners),
-  night toggle.
-- Classic mode: precomputed `page-coords/{n}.json` (emblem-anchored,
-  regenerated in v25), tall pills, tap-anywhere cloze, reveal-one-by-one.
-- `loadMushafFont()` returns null — do NOT re-enable QCF font loading.
+## 3. Architecture (current)
+- Single-file PWA: `index.html` (HTML+CSS+JS) + `sw.js`. No build step.
+- Audio: gapless per-verse playback driven by `murattal_timestamps.json` and
+  `mujawwad_timestamps.json`; structure in `surah_structure.json`. Audio files
+  are stored permanently in IndexedDB by the page (SW caches are wiped per
+  version, so the SW never handles audio).
+- Mushaf viewer: two scanned-page editions defined in `MUSHAF_SETS`
+  (`index.html`): `madani` → `pages-madani_1421/` + `page-coords-madani_1421/`,
+  `tajweed` → `pages-tajweed/` + `page-coords-tajweed/`. 604 pages each.
+  Coords files hold per-verse geometry used for cloze/reveal.
+- Plain (text) mode was removed in v60. `loadMushafFont()` returns null — do
+  NOT re-enable QCF font loading.
 - Page 604 has a known irregular-layout quirk (~20px cover, acceptable).
 
-## 6. Data sources (verified working)
-- Words API: `https://api.qurancdn.com/api/v4/verses/by_page/{N}?words=true&word_fields=text_uthmani,text_imlaei,code_v1,line_number,position,char_type_name`
-- Page images: `https://raw.githubusercontent.com/QuranHub/quran-pages-images/main/easyquran.com/hafs-tajweed/{N}.jpg`
-- Tajweed JSON (only if ever needed again): `https://raw.githubusercontent.com/quran/quran-tajweed/master/output/tajweed.hafs.uthmani-pause-sajdah.json` — offsets index into Tanzil-format imlaei text (words + Arabic digit).
+## 4. Decisions already made (don't redo)
+- QCF fonts in `quran/quran.com-images` are sanitized stubs (hollow glyphs,
+  scrambled cmap); the real fonts are not usable from that repo.
+- A web-rendered tajweed prototype (imlaei text + tajweed JSON + UthmanicHafs
+  font) was reviewed by the owner and **rejected**. Mushaf stays on scanned
+  page images + precomputed coords.
 
-## 7. Tooling
-`.tools/` (detect_emblems.py, build_coords.py, qa_coords.py, deploy.py,
-full_run.sh) is clean and works. `refs/` holds the emblem/basmallah/surah
-reference crops. Keep tooling here so both agents share it.
+## 5. External dependencies
+- Audio: `mirrors.quranicaudio.com`, `download.quranicaudio.com`,
+  `server12.mp3quran.net`.
+- Words API (`MUSHAF_WORDS_API`): `api.qurancdn.com`.
+- Page scans/geometry originate from third-party projects; check licences
+  before wider distribution.
 
-— VPS Hermes (DeepSeek main, Groq/Qwen vision fallback, reachable via
-Tailscale 100.104.153.112)
+## 6. Tooling (`.tools/`) — LEGACY coordinate pipeline
+`detect_emblems.py`, `build_coords.py`, `qa_coords.py`, `triage_qa.py`,
+`deploy.py`, `full_run.sh` were built for the old single `page-coords/` set
+(QuranHub tajweed JPGs). That folder was removed from the repo; it is still in
+git history before the cleanup commit if the pipeline is ever revived, and the
+scripts need their `--old`/`DST` paths pointed at an existing coords folder.
+`full_run.sh` also has a hardcoded Windows path. The current app does not use
+any of this at runtime.
+`check_version.py` is current and in use.

@@ -4,7 +4,7 @@
 // pass straight through to the network — the page serves blob: URLs from
 // IndexedDB when files are saved, so this never blocks offline playback.
 const CACHE = 'quran-player-v84';
-// v60: the plain text mode (and its page-coords/) is gone; each edition's own
+// v60: the plain text mode is gone; each edition's own
 // coordinates are fetched per page and cached by the SW at runtime.
 const SHELL = [
   './',
