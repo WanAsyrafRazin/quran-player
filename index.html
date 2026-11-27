@@ -2176,10 +2176,12 @@
     const MUSHAF_MAX_ASPECT = Math.max(...Object.values(MUSHAF_SETS).map(s => s.w / s.h));
     // v68: side strips are back to the panel's own 16px padding (Asyraf preferred the
     // bigger bottom tap area over wider side targets). Set >0 to reserve extra cream.
-    // v86: the cloze covers grow this many SCREEN px past the text block (left, right and
-    // below the last line) so no ink edge peeks out around the covered area. Clamped to the page.
-    const MUSHAF_COVER_MARGIN_PX = 20;
-    const MUSHAF_SIDE_TAP = 0;
+    // v86: the empty strip on each side of the page (cream, outside the page card) is a
+    // tap target that reveals the cloze one by one. It is MUSHAF_TAP_MARGIN_PX wide so a
+    // tap near the page edge can never land on a cover by accident. The panel body already
+    // has 16px of side padding; MUSHAF_SIDE_TAP is the extra reserved on top of that.
+    const MUSHAF_TAP_MARGIN_PX = 20;
+    const MUSHAF_SIDE_TAP = Math.max(0, MUSHAF_TAP_MARGIN_PX - 16);
     // v71: width reserved on EACH side of the page when the reveal slider is mounted on a
     // side rail (44px thumb + breathing room). The page shrinks by 2× this to make room.
     const MUSHAF_RAIL_GUTTER = 56;
@@ -2622,28 +2624,17 @@
             // (viewport resize / rotation), matching the fixed aspect-ratio parent.
             // v82: full-width rows — see mfEqualizeBands above.
             const verseRects = mfEqualizeBands(coords);
-            // v86: text-block bounds + last line, then grow the covers by the safe margin.
-            let bL = Infinity, bR = -Infinity, bFirstY = Infinity, bLastY = -Infinity;
+            // v86: flag the bottom-most row so its cover can be embossed top AND bottom.
+            // Covers are exactly the coordinate rows (no padding), so every row keeps the
+            // same height as the printed line it hides.
+            let bLastY = -Infinity;
             for (const k of Object.keys(verseRects))
-                for (const [x, y, w] of verseRects[k]) {
-                    if (x < bL) bL = x; if (x + w > bR) bR = x + w;
-                    if (y < bFirstY) bFirstY = y; if (y > bLastY) bLastY = y;
-                }
-            const marginN = Math.max(2, Math.round(MUSHAF_COVER_MARGIN_PX / scale));  // in image px
-            // top margin: grow the first row upward ONLY when it sits at the very top of the
-            // page. If anything is printed above it (surah header, bismillah) the cover must
-            // start exactly at the row, or it would clip that line.
-            const topY = bFirstY <= 2 * marginN ? Math.max(0, bFirstY - marginN) : bFirstY;
+                for (const r of verseRects[k]) if (r[1] > bLastY) bLastY = r[1];
             for (const vkey of Object.keys(verseRects)) {
                 for (const [x, y, w, h] of verseRects[vkey]) {
-                    let x0 = x, x1 = x + w, y0 = y, y1 = y + h;
-                    if (y <= bFirstY + 1) y0 = Math.min(y, topY);
-                    if (x0 <= bL + 1) x0 = Math.max(0, x0 - marginN);
-                    if (x1 >= bR - 1) x1 = Math.min(iw, x1 + marginN);
                     const isLast = y >= bLastY - 1;
-                    if (isLast) y1 = Math.min(ih, y1 + marginN);
                     coversHtml += `<span class="mf-verse${isLast ? ' mf-lastline' : ''}" data-vkey="${vkey}" onclick="tapVerse(this)"
-                        style="position:absolute;left:${(x0 / iw * 100).toFixed(3)}%;top:${(y0 / ih * 100).toFixed(3)}%;width:${((x1 - x0) / iw * 100).toFixed(3)}%;height:${((y1 - y0) / ih * 100).toFixed(3)}%;">
+                        style="position:absolute;left:${(x / iw * 100).toFixed(3)}%;top:${(y / ih * 100).toFixed(3)}%;width:${(w / iw * 100).toFixed(3)}%;height:${(h / ih * 100).toFixed(3)}%;">
                         <span class="mf-cover">${toArabicDigits(vkey.split(':')[1])}</span></span>`;
                 }
             }
