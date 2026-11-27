@@ -1556,18 +1556,6 @@
         .pw-link { background: none; border: none; color: #2B6CB0; font-size: 12px; font-weight: 700; padding: 8px 2px; }
         body.dark-mode .pw-link { color: #63B3ED; }
         .pw-go { background: #A9803B; color: #fff; border: none; border-radius: 10px; padding: 9px 24px; font-size: 14px; font-weight: 700; }
-        /* v74: controller key HUD — shows what a Bluetooth remote actually sends */
-        .key-hud {
-            position: fixed; left: 10px; bottom: 10px; z-index: 100001;
-            max-width: calc(100vw - 20px);
-            padding: 6px 10px; border-radius: 8px;
-            background: rgba(15,23,32,.92); color: #F7FAFC;
-            font: 600 11px/1.4 ui-monospace, Menlo, monospace;
-            opacity: 0; pointer-events: none; transition: opacity .15s ease;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .key-hud.visible { opacity: 1; }
-        #key-hud-btn.selected { background: #A9803B; color: #fff; }
         body.dark-mode .help-modal { background: #1A232E; }
         .help-head {
             display: flex;
@@ -1626,6 +1614,58 @@
         }
         body.dark-mode .help-row code { background: #141B24; border-color: #2D3748; color: #E8D5A0; }
         .help-row span { line-height: 1.4; }
+
+        /* ==================== v85 UI polish ====================
+           Overrides only: spacing, sizing and grouping. No behaviour change. */
+        .top-bar { margin-bottom: 14px; }
+        .top-actions { display: flex; gap: 8px; }
+        .theme-toggle { width: 38px; height: 38px; font-size: 17px; }
+        .version-badge { padding: 5px 10px; box-shadow: none; }
+
+        .section-header {
+            font-size: 12px; letter-spacing: 0.6px;
+            margin: 22px 0 8px 16px;
+        }
+        .section-panel {
+            padding: 10px 0;
+            border: 1px solid #ECEEF2;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        }
+        body.dark-mode .section-panel { border-color: #232E3B; box-shadow: none; }
+        .verses-panel { padding: 0; }
+        .verse-item { padding: 14px 16px; }
+
+        .segmented-control { margin: 0 10px; }
+        .segmented-control.mode-select { margin: 0 10px; flex-wrap: nowrap; gap: 0; }
+        .segmented-control.mode-select .seg-option { flex: 1 1 0; }
+        .seg-option { font-size: 14px; padding: 10px 0; }
+
+        .adjust-panel { padding: 5px; border: none; }
+        .adjust-control { gap: 2px; }
+        body.dark-mode .adjust-panel { background-color: #111720; }
+        .adjust-option { flex: 1 1 0; padding: 10px 0; font-size: 14px; border-radius: 13px; }
+
+        .jump-row { padding: 0 10px; }
+        #jump-input { border-radius: 10px; padding: 9px 12px; }
+        #jump-go { border-radius: 10px; padding: 9px 18px; }
+
+        .offline-status { margin: 0 10px 4px; border-radius: 10px; font-weight: 500; }
+        .offline-sub {
+            font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+            color: #8E919D; padding: 10px 16px 6px;
+        }
+        .offline-buttons { padding: 0 10px; gap: 6px; }
+        .dl-btn {
+            text-align: left; font-weight: 600; font-size: 14px;
+            background: #EEF3F5; color: #2F4A53; border: 1px solid #DCE5E9;
+        }
+        .dl-btn:hover { background: #E2EBEF; }
+        body.dark-mode .dl-btn { background: #1F2A36; color: #CBD5E0; border-color: #2D3748; }
+        body.dark-mode .dl-btn:hover { background: #263445; }
+        .offline-hint { padding: 12px 16px 2px; }
+
+        /* Settings: the main-view switch no longer overflows the card */
+        #main-view-seg { width: auto; margin: 0; }
     </style>
 </head>
 <body>
@@ -1634,15 +1674,17 @@
     <!-- Top Bar: version badge (left) + Theme Toggle (right) -->
     <div class="top-bar">
         <span class="version-badge" id="version-badge">…</span>
-        <button class="theme-toggle" id="home-settings-btn" onclick="openSettings()" aria-label="Settings" title="Settings" style="width:34px;height:34px;font-size:16px;">⚙</button>
-        <button class="theme-toggle" id="home-help-btn" onclick="openHelp()" aria-label="Help and hotkeys" title="Help &amp; hotkeys" style="width:34px;height:34px;font-size:16px;">❓</button>
-        <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌙</button>
+        <div class="top-actions">
+            <button class="theme-toggle" id="home-settings-btn" onclick="openSettings()" aria-label="Settings" title="Settings">⚙</button>
+            <button class="theme-toggle" id="home-help-btn" onclick="openHelp()" aria-label="Help and hotkeys" title="Help &amp; hotkeys">❓</button>
+            <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" aria-label="Toggle Dark Mode">🌙</button>
+        </div>
     </div>
 
     <!-- Location bar: always shows where the current selection is -->
     <div class="location-bar" id="location-bar">Loading…</div>
 
-    <div class="section-header" style="margin-top:0;">ADJUST END VERSE TO THE END OF THE</div>
+    <div class="section-header" style="margin-top:0;">Extend selection to the end of the</div>
     <div class="section-panel adjust-panel">
         <div class="adjust-control" id="end-verse-selector">
             <button class="adjust-option selected" onclick="selectAdjust(this, 'page')">Page</button>
@@ -1652,14 +1694,14 @@
         </div>
     </div>
 
-    <div class="section-header">SELECTION MODE</div>
+    <div class="section-header">Select by</div>
     <div class="section-panel">
         <div class="segmented-control mode-select">
-            <button class="seg-option selected" onclick="changeMode(this, 'ayah')">By Ayah</button>
-            <button class="seg-option" onclick="changeMode(this, 'page')">By Page</button>
-            <button class="seg-option" onclick="changeMode(this, 'maqra')">By Maqra'</button>
-            <button class="seg-option" onclick="changeMode(this, 'surah')">By Surah</button>
-            <button class="seg-option" onclick="changeMode(this, 'juz')">By Juz</button>
+            <button class="seg-option selected" onclick="changeMode(this, 'ayah')">Ayah</button>
+            <button class="seg-option" onclick="changeMode(this, 'page')">Page</button>
+            <button class="seg-option" onclick="changeMode(this, 'maqra')">Maqra'</button>
+            <button class="seg-option" onclick="changeMode(this, 'surah')">Surah</button>
+            <button class="seg-option" onclick="changeMode(this, 'juz')">Juz</button>
         </div>
     </div>
 
@@ -1692,7 +1734,6 @@
             <button id="jump-go" onclick="jumpGo()">Go</button>
         </div>
         <div id="jump-suggest" class="jump-suggest"></div>
-        <div style="height: 4px;"></div>
     </div>
 
     <div class="section-header">PLAY EACH VERSE</div>
@@ -1703,7 +1744,6 @@
             <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
             <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
         </div>
-        <div style="height: 10px;"></div>
     </div>
 
     <div class="section-header">PLAY EACH PAGE</div>
@@ -1714,7 +1754,6 @@
             <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
             <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
         </div>
-        <div style="height: 10px;"></div>
     </div>
 
     <div class="section-header">PLAY EACH MAQRA'</div>
@@ -1725,7 +1764,6 @@
             <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
             <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
         </div>
-        <div style="height: 10px;"></div>
     </div>
 
     <div class="section-header">PLAY SELECTED</div>
@@ -1736,7 +1774,6 @@
             <button class="seg-option" data-val="3" onclick="selectSegmented(this)">3 times</button>
             <button class="seg-option" data-val="loop" onclick="selectSegmented(this)">loop</button>
         </div>
-        <div style="height: 10px;"></div>
     </div>
 
     <div class="section-header">RECITATION VERSION</div>
@@ -1745,7 +1782,6 @@
             <button class="seg-option" data-file="murattal_timestamps.json" onclick="setRecitation(this, 'murattal_timestamps.json')">Murattal (fast)</button>
             <button class="seg-option" data-file="mujawwad_timestamps.json" onclick="setRecitation(this, 'mujawwad_timestamps.json')">Mujawwad</button>
         </div>
-        <div style="height: 10px;"></div>
     </div>
 
     <!-- Floating Mushaf window (QCF text-rendered, per-ayah cloze at exact positions) -->
@@ -1781,14 +1817,18 @@
     <div class="section-header">OFFLINE MODE</div>
     <div class="section-panel">
         <div id="offline-status" class="offline-status">Checking offline support...</div>
+        <div class="offline-sub">Audio</div>
         <div class="offline-buttons">
-            <button id="dl-murattal" class="dl-btn" onclick="downloadRecitation('murattal_timestamps.json')">⬇ Download Murattal (fast) — 628 MB</button>
-            <button id="dl-mujawwad" class="dl-btn" onclick="downloadRecitation('mujawwad_timestamps.json')">⬇ Download Mujawwad — 1.3 GB</button>
-            <button id="dl-mushaf" class="dl-btn" onclick="downloadMushafPages('madani')">⬇ Save Madani Mushaf 1421 — 604 pages (~48 MB)</button>
-            <button id="dl-mushaf-tajweed" class="dl-btn" onclick="downloadMushafPages('tajweed')">⬇ Save Tajweed Mushaf — 604 pages (~134 MB)</button>
+            <button id="dl-murattal" class="dl-btn" onclick="downloadRecitation('murattal_timestamps.json')">⬇ Murattal (fast) — 628 MB</button>
+            <button id="dl-mujawwad" class="dl-btn" onclick="downloadRecitation('mujawwad_timestamps.json')">⬇ Mujawwad — 1.3 GB</button>
+        </div>
+        <div class="offline-sub">Mushaf pages</div>
+        <div class="offline-buttons">
+            <button id="dl-mushaf" class="dl-btn" onclick="downloadMushafPages('madani')">⬇ Madani Mushaf 1421 — ~48 MB</button>
+            <button id="dl-mushaf-tajweed" class="dl-btn" onclick="downloadMushafPages('tajweed')">⬇ Tajweed Mushaf — ~134 MB</button>
         </div>
         <div id="dl-progress" class="dl-progress" style="display:none;"></div>
-        <div class="offline-hint">💡 <b>Install:</b> iPhone/iPad Safari → Share → <b>Add to Home Screen</b>. Then open the app icon (full-screen, like a native app). Audio is <b>saved permanently on your device</b> whenever you play a surah — or grab everything with the buttons above. Files survive app updates. Keep the app open while downloading. Works in airplane mode once saved.</div>
+        <div class="offline-hint"><b>Install:</b> in Safari, tap Share → <b>Add to Home Screen</b>.<br>Every surah you play is saved on your device automatically, and saved files survive app updates. Keep the app open while a download runs.</div>
     </div>
 </div>
 
@@ -1819,7 +1859,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v84';
+    const APP_VERSION = 'v85';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -3286,29 +3326,6 @@
     //      as well as arrows/space, because the Ultimate Software maps to those.
     //   2. HID GAMEPAD (the Micro's default mode) → NO keydown ever fires; only the
     //      Gamepad API sees it. Polled below.
-    let keyHudOn = false;
-    let keyHudT = null;
-    function keyHud(msg) {
-        const el = document.getElementById('key-hud');
-        if (!el) return;
-        el.querySelector('.kh-val').textContent = msg;
-        if (!keyHudOn) return;
-        el.classList.add('visible');
-        clearTimeout(keyHudT);
-        keyHudT = setTimeout(() => { if (keyHudOn) el.classList.remove('visible'); }, 4000);
-    }
-    function toggleKeyHud() {
-        keyHudOn = !keyHudOn;
-        const el = document.getElementById('key-hud');
-        const btn = document.getElementById('key-hud-btn');
-        if (el) el.classList.toggle('visible', keyHudOn);
-        if (btn) btn.classList.toggle('selected', keyHudOn);
-        if (keyHudOn) keyHud('waiting for a button… (no event = gamepad mode)');
-    }
-    function keyHudPress(k, c) {
-        if (k !== c) keyHud(`⌨ key="${k}"  code="${c}"`);
-        else keyHud(`⌨ key="${k}"`);
-    }
     (function initGamepadBridge() {
         const PAD_MAP = {
             0: 'reveal', 1: 'unreveal', 2: 'toggleAll', 3: 'nextPage',
@@ -3330,7 +3347,6 @@
                 pad.buttons.forEach((b, i) => {
                     const k = pad.index + ':' + i;
                     if (b.pressed && !prev[k]) {
-                        keyHud(`🎮 pad${pad.index} btn ${i}${PAD_MAP[i] ? ' → ' + PAD_MAP[i] : ''}`);
                         if (PAD_MAP[i]) act(PAD_MAP[i]);
                     }
                     prev[k] = b.pressed;
@@ -3338,10 +3354,6 @@
             }
             requestAnimationFrame(poll);
         }
-        window.addEventListener('gamepadconnected', e => {
-            keyHud('🎮 connected: ' + String(e.gamepad.id).slice(0, 28));
-        });
-        window.addEventListener('gamepaddisconnected', () => keyHud('🎮 disconnected'));
         requestAnimationFrame(poll);
     })();
 
@@ -4047,7 +4059,6 @@
         document.addEventListener('keydown', e => {
             const tag = (e.target.tagName || '').toLowerCase();
             const field = (tag === 'input' || tag === 'textarea' || tag === 'select');
-            keyHudPress(e.key, e.code);          // v74 diagnostic overlay
             // v74: a stale focused field used to swallow EVERY shortcut — after using
             // the page-number box, a remote's keys silently did nothing. Keep digits,
             // Enter/Tab/Escape and arrows for the field; anything else blurs it.
@@ -4946,16 +4957,16 @@
         const murDone = mur >= 114, mujDone = muj >= 114;
 
         el.textContent = navigator.onLine
-            ? `● Online — ${total} of 228 audio files saved permanently (playing a surah saves it automatically)`
-            : `● Offline — ${total} audio files saved. Playback works for saved surahs.`;
+            ? `● Online · ${total} of 228 audio files saved`
+            : `● Offline · ${total} audio files saved — saved surahs still play`;
         if (murDone && mujDone) el.textContent += ' Fully offline! 🎉';
 
         const bm = document.getElementById('dl-murattal');
         const bj = document.getElementById('dl-mujawwad');
         bm.disabled = murDone || downloading || downloadingMushaf;
         bj.disabled = mujDone || downloading || downloadingMushaf;
-        bm.innerHTML = murDone ? '✅ Murattal (fast) — saved (114/114)' : '⬇ Download Murattal (fast) — 628 MB';
-        bj.innerHTML = mujDone ? '✅ Mujawwad — saved (114/114)' : '⬇ Download Mujawwad — 1.3 GB';
+        bm.innerHTML = murDone ? '✅ Murattal (fast) — saved' : '⬇ Murattal (fast) — 628 MB';
+        bj.innerHTML = mujDone ? '✅ Mujawwad — saved' : '⬇ Mujawwad — 1.3 GB';
 
         // v63: one save button per edition, each with its own counter + label, and
         // each reporting how much device storage its saved pages actually use.
@@ -4971,10 +4982,10 @@
             const onDevice = u.pages ? ` · ${fmtMB(u.bytes)} on device` : '';
             btn.disabled = complete || downloadingMushaf;
             btn.innerHTML = complete
-                ? `✅ ${MUSHAF_SETS[mode].name} — saved (604/604)${onDevice}`
+                ? `✅ ${MUSHAF_SETS[mode].name} — saved${onDevice}`
                 : (saved > 0
-                    ? `⬇ Save ${MUSHAF_SETS[mode].name} — ${saved}/604 saved${onDevice}`
-                    : `⬇ Save ${MUSHAF_SETS[mode].name} — 604 pages (${MUSH_SIZES[mode] || ''})`);
+                    ? `⬇ ${MUSHAF_SETS[mode].name} — ${saved}/604${onDevice}`
+                    : `⬇ ${MUSHAF_SETS[mode].name} — ${MUSH_SIZES[mode] || ''}`);
         }
     }
 
@@ -5045,7 +5056,6 @@
     loadQuranData();
 </script>
 
-<div class="key-hud" id="key-hud"><span class="kh-val">…</span></div>
 
 <!-- Page wheel picker (v79) -->
 <div class="help-overlay" id="page-wheel-overlay" onclick="if (event.target === this) closePageWheel()">
@@ -5108,12 +5118,6 @@
                     <span class="set-val" id="hold-speed-val">100</span>
                 </div>
                 <div class="set-hint">Pixels revealed per 200 ms while a key is held (100 = 500 px/s, a whole page in about 33 s). Taps still step 6% of the ayah.</div>
-            </div>
-            <div class="help-section"><div class="help-title">Controller test</div>
-                <div class="set-row">
-                    <button type="button" class="seg-option" id="key-hud-btn" onclick="toggleKeyHud()">Show key output</button>
-                </div>
-                <div class="set-hint">Turn this on, then press a button on the remote. A key name means keyboard mode. A “🎮 pad… btn N” means gamepad mode — both work. Nothing at all means the remote is not paired as an input device.</div>
             </div>
         </div>
     </div>
