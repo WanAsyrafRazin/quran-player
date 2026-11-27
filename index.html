@@ -1659,6 +1659,14 @@
 
         /* Settings: the main-view switch no longer overflows the card */
         #main-view-seg { width: auto; margin: 0; }
+        /* v92: the toolbar has 9 buttons now; on very narrow screens (<=360px) make them a
+           touch smaller so the row never wraps. Last in the sheet so it beats the
+           short-screen rules above. */
+        @media (max-width: 360px) {
+            .mushaf-float-header { gap: 3px; }
+            .mushaf-nav { width: 28px; }
+            .mushaf-float-close { width: 28px; }
+        }
     </style>
 </head>
 <body>
@@ -1788,6 +1796,7 @@
             <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle page style" title="Plain text — tap to switch">⬛</button>
             <button class="mushaf-nav" id="mushaf-theme-btn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Night mode">🌙</button>
             <button class="mushaf-nav" id="mushaf-slider-btn" onclick="cycleSliderPos()" aria-label="Move the reveal slider" title="Reveal slider: bottom middle (tap to move)">⬇</button>
+            <button class="mushaf-nav" id="mushaf-fit-btn" onclick="cyclePageFit()" aria-label="Page width" title="Page width: Balanced (tap to change)">▭</button>
             <button class="mushaf-float-close" id="mushaf-close" onclick="toggleMushaf()" aria-label="Close Mushaf">✕</button>
         </div>
         <div class="mushaf-float-controls">
@@ -1852,7 +1861,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v91';
+    const APP_VERSION = 'v92';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -3534,10 +3543,29 @@
         });
     }
 
+    const PAGE_FIT_ORDER = ['natural', 'balanced', 'fill'];
+    const PAGE_FIT_INFO = {
+        natural:  { icon: '▯', label: 'Natural' },
+        balanced: { icon: '▭', label: 'Balanced' },
+        fill:     { icon: '▬', label: 'Fill' }
+    };
+
     function syncPageFitUI() {
         document.querySelectorAll('#page-fit-seg .seg-option').forEach(b => {
             b.classList.toggle('selected', b.dataset.fit === qpPageFit);
         });
+        const btn = document.getElementById('mushaf-fit-btn');
+        if (btn) {
+            const info = PAGE_FIT_INFO[qpPageFit];
+            btn.textContent = info.icon;
+            btn.title = 'Page width: ' + info.label + ' (tap to change)';
+            btn.setAttribute('aria-label', 'Page width: ' + info.label + '. Tap to change.');
+        }
+    }
+
+    // toolbar button: Natural -> Balanced -> Fill -> Natural
+    function cyclePageFit() {
+        setPageFit(PAGE_FIT_ORDER[(PAGE_FIT_ORDER.indexOf(qpPageFit) + 1) % PAGE_FIT_ORDER.length]);
     }
 
     function setPageFit(v) {
@@ -3547,6 +3575,8 @@
         const panel = document.getElementById('mushaf-panel');
         if (panel && panel.classList.contains('visible')) showMushafPage(mushafPage);
     }
+
+    syncPageFitUI();   // show the saved choice on the toolbar button at start-up
 
     function setMainView(v) {
         qpMainView = (v === 'mushaf') ? 'mushaf' : 'selection';
