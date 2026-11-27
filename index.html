@@ -1879,7 +1879,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v86';
+    const APP_VERSION = 'v87';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2176,12 +2176,12 @@
     const MUSHAF_MAX_ASPECT = Math.max(...Object.values(MUSHAF_SETS).map(s => s.w / s.h));
     // v68: side strips are back to the panel's own 16px padding (Asyraf preferred the
     // bigger bottom tap area over wider side targets). Set >0 to reserve extra cream.
-    // v86: the empty strip on each side of the page (cream, outside the page card) is a
-    // tap target that reveals the cloze one by one. It is MUSHAF_TAP_MARGIN_PX wide so a
-    // tap near the page edge can never land on a cover by accident. The panel body already
-    // has 16px of side padding; MUSHAF_SIDE_TAP is the extra reserved on top of that.
-    const MUSHAF_TAP_MARGIN_PX = 20;
-    const MUSHAF_SIDE_TAP = Math.max(0, MUSHAF_TAP_MARGIN_PX - 16);
+    // v87: DEAD BAND. Taps within this many px directly above the first cloze row and
+    // directly below the last one do nothing, so a near-miss never reveals or covers.
+    // Everywhere else outside the cloze (beside it, further above / below) a tap reveals
+    // the cloze one by one. There is no dead band on the left / right.
+    const MUSHAF_DEAD_BAND_PX = 20;
+    const MUSHAF_SIDE_TAP = 0;
     // v71: width reserved on EACH side of the page when the reveal slider is mounted on a
     // side rail (44px thumb + breathing room). The page shrinks by 2× this to make room.
     const MUSHAF_RAIL_GUTTER = 56;
@@ -2737,7 +2737,7 @@
             <div class="mf-reveal-row"><input type="range" class="mf-reveal-slider" min="0" max="100" value="${mushafRevealPct}" aria-label="Reveal cloze gradually"></div>
             <div class="mf-below">
                 <div class="mf-foot">
-                    <span class="mf-foot-hint">👆 Tap beside or below the page to reveal one by one<br>Tap revealed text to cover from there to the bottom</span>
+                    <span class="mf-foot-hint">👆 Tap outside the cloze to reveal one by one<br>Tap revealed text to cover from there to the bottom</span>
                 </div>
             </div>`;
         updateModeBtns();
@@ -2792,19 +2792,29 @@
         row.style.setProperty('--rail-len', len + 'px');
     }
 
-    // v66: a tap ON an ayah bar toggles that ayah (the bar handles its own taps).
-    // A tap on empty space INSIDE the page box now does NOTHING — the reveal-one-
-    // by-one target moved out to the cream strips beside the page and below it,
-    // so a near-miss between two lines can no longer re-cover a verse.
+    // v66: a tap ON an ayah bar is handled by the bar itself (see tapVerse).
+    // v87: a tap on empty space inside the page box reveals one by one, except in the
+    // 20px dead band above / below the cloze (see mushafInDeadBand).
+    // v87: true when the tap is inside the dead band (see MUSHAF_DEAD_BAND_PX): within the
+    // cloze block's horizontal extent, up to 20px above its first row or below its last row.
+    function mushafInDeadBand(ev) {
+        const rs = [...document.querySelectorAll('#mushaf-page .mf-verse')]
+            .map(v => v.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0);
+        if (!rs.length) return false;
+        const L = Math.min(...rs.map(r => r.left)), R = Math.max(...rs.map(r => r.right));
+        const T = Math.min(...rs.map(r => r.top)), B = Math.max(...rs.map(r => r.bottom));
+        const x = ev.clientX, y = ev.clientY, m = MUSHAF_DEAD_BAND_PX;
+        if (x < L || x > R) return false;
+        return (y >= T - m && y < T) || (y > B && y <= B + m);
+    }
+
     function classicTap(ev) {
         if (ev.target.closest('.mf-verse')) return;
-        // v86: a tap on blank page area (margins, header band) covers from that height
-        // down to the bottom: every verse that still has any part at or below the tap.
-        const list = orderedVerseEls();
-        const startIdx = list.findIndex(el =>
-            [...document.querySelectorAll(`#mushaf-page .mf-verse[data-vkey="${el.dataset.vkey}"]`)]
-                .some(f => f.getBoundingClientRect().bottom > ev.clientY));
-        if (startIdx >= 0) clozeFromIndex(list, startIdx);
+        // v87: blank page area (surah header, bismillah, the few px beside the rows) is
+        // "outside the cloze": it reveals one by one, exactly like the strips beside and
+        // below the page — except inside the 20px dead band, which ignores the tap.
+        if (mushafInDeadBand(ev)) return;
+        mushafRevealNext();
     }
 
     // v86: pointer tap on an ayah. A COVERED ayah behaves as before (reveals just itself).
@@ -3968,6 +3978,8 @@
         const pageEl = document.getElementById('mushaf-page');
         if (pageEl) {
             pageEl.addEventListener('click', e => {
+                // v87: the 20px dead band just above / below the cloze ignores taps.
+                if (mushafInDeadBand(e)) return;
                 // v65: the whole strip below the page reveals one by one.
                 if (e.target.closest('.mf-foot, .mf-below')) { mushafRevealNext(); return; }
                 // v66: the empty cream strips EITHER SIDE of the page card, and the
