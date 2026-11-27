@@ -1879,7 +1879,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v87';
+    const APP_VERSION = 'v88';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2181,7 +2181,7 @@
     // Everywhere else outside the cloze (beside it, further above / below) a tap reveals
     // the cloze one by one. There is no dead band on the left / right.
     const MUSHAF_DEAD_BAND_PX = 20;
-    const MUSHAF_SIDE_TAP = 0;
+    const MUSHAF_SIDE_TAP = 0;  // (no longer used: the page is full-bleed since v88)
     // v71: width reserved on EACH side of the page when the reveal slider is mounted on a
     // side rail (44px thumb + breathing room). The page shrinks by 2× this to make room.
     const MUSHAF_RAIL_GUTTER = 56;
@@ -2611,10 +2611,19 @@
         // so the page is stretched to fill that shared box (Asyraf accepted the stretch).
         // Safe because the ayah geometry, markers and header bands are all stored as
         // PERCENTAGES of the page: they stretch with the image, so cloze stays aligned.
-        const sharedH = Math.min(availH, availW / MUSHAF_MAX_ASPECT);
-        const maxW = Math.min(availW, sharedH * MUSHAF_MAX_ASPECT);
+        // v88: the page now fills the panel from the left edge to the right edge (full
+        // bleed, no side padding). Height still fits the screen; when the screen is too
+        // short for the page at its natural shape, the image is stretched sideways to fill
+        // the width (same `object-fit: fill` stretch the shared box already used).
+        const panelW = panel ? panel.getBoundingClientRect().width : 430;
+        const fullW = Math.max(200, panelW - 2 * railGutter);
+        const bodyCW = Math.max(200, panelW - 32);               // body content width (16px padding each side)
+        const sharedH = Math.min(availH, fullW / MUSHAF_MAX_ASPECT);
+        const maxW = fullW;
         const boxH = Math.round(sharedH);
         const scale = maxW / iw;
+        const rowW = Math.min(maxW, bodyCW);                     // corner labels + page number stay inset
+        const bleed = Math.max(0, (maxW - bodyCW) / 2);          // how far the page pokes into the padding
 
         const coords = await getPageCoords(p);
         let coversHtml = '', textLayer = '', markersHtml = '', headersHtml = '';
@@ -2633,7 +2642,7 @@
             for (const vkey of Object.keys(verseRects)) {
                 for (const [x, y, w, h] of verseRects[vkey]) {
                     const isLast = y >= bLastY - 1;
-                    coversHtml += `<span class="mf-verse${isLast ? ' mf-lastline' : ''}" data-vkey="${vkey}" onclick="tapVerse(this)"
+                    coversHtml += `<span class="mf-verse${isLast ? ' mf-lastline' : ''}" data-vkey="${vkey}" onclick="toggleVerseCloze(this)"
                         style="position:absolute;left:${(x / iw * 100).toFixed(3)}%;top:${(y / ih * 100).toFixed(3)}%;width:${(w / iw * 100).toFixed(3)}%;height:${(h / ih * 100).toFixed(3)}%;">
                         <span class="mf-cover">${toArabicDigits(vkey.split(':')[1])}</span></span>`;
                 }
@@ -2724,20 +2733,20 @@
         }
 
         pageEl.innerHTML = `
-            <div class="mf-classic-corners" style="width:${maxW}px;">
+            <div class="mf-classic-corners" style="width:${rowW}px;">
                 <span class="mf-corner-box">${first ? (SURAH_NAMES_AR[first.surahNum] || '') : ''}</span>
                 <span class="mf-corner-box">الجزء ${toArabicDigits(first ? first.juz : 1)}</span>
             </div>
-            <div class="mf-classic" style="width:${maxW}px;height:${boxH}px;" onclick="classicTap(event)">
+            <div class="mf-classic" style="width:${maxW}px;height:${boxH}px;${bleed > 0 ? `margin-left:-${bleed}px;margin-right:-${bleed}px;` : ''}border-radius:0;" onclick="classicTap(event)">
                 <img class="mf-classic-img" src="${displaySrc}" alt="Page ${p}" draggable="false">
                 ${headersHtml}${markersHtml}${textLayer}${coversHtml}
             </div>
-            <div class="mf-pagenum-row" style="width:${maxW}px;"><span class="mf-pagenum">${toArabicDigits(p)}</span></div>
+            <div class="mf-pagenum-row" style="width:${rowW}px;"><span class="mf-pagenum">${toArabicDigits(p)}</span></div>
             <div class="mf-slider-gap"></div>
             <div class="mf-reveal-row"><input type="range" class="mf-reveal-slider" min="0" max="100" value="${mushafRevealPct}" aria-label="Reveal cloze gradually"></div>
             <div class="mf-below">
                 <div class="mf-foot">
-                    <span class="mf-foot-hint">👆 Tap outside the cloze to reveal one by one<br>Tap revealed text to cover from there to the bottom</span>
+                    <span class="mf-foot-hint">👆 Tap outside the cloze to reveal one by one</span>
                 </div>
             </div>`;
         updateModeBtns();
@@ -2792,7 +2801,7 @@
         row.style.setProperty('--rail-len', len + 'px');
     }
 
-    // v66: a tap ON an ayah bar is handled by the bar itself (see tapVerse).
+    // v66: a tap ON an ayah bar is handled by the bar itself (toggleVerseCloze).
     // v87: a tap on empty space inside the page box reveals one by one, except in the
     // 20px dead band above / below the cloze (see mushafInDeadBand).
     // v87: true when the tap is inside the dead band (see MUSHAF_DEAD_BAND_PX): within the
@@ -2815,28 +2824,6 @@
         // below the page — except inside the 20px dead band, which ignores the tap.
         if (mushafInDeadBand(ev)) return;
         mushafRevealNext();
-    }
-
-    // v86: pointer tap on an ayah. A COVERED ayah behaves as before (reveals just itself).
-    // A REVEALED ayah now re-covers itself and everything below it, so the learner can
-    // reset "from here to the bottom" with one tap. (Keyboard/remote shortcuts still call
-    // toggleVerseCloze directly and keep their one-at-a-time behaviour.)
-    function tapVerse(el) {
-        if (el.classList.contains('covered')) { toggleVerseCloze(el); return; }
-        const list = orderedVerseEls();
-        const idx = list.findIndex(x => x.dataset.vkey === el.dataset.vkey);
-        clozeFromIndex(list, idx < 0 ? 0 : idx);
-    }
-
-    function clozeFromIndex(list, startIdx) {
-        for (let i = startIdx; i < list.length; i++) {
-            document.querySelectorAll(`#mushaf-page .mf-verse[data-vkey="${list[i].dataset.vkey}"]`)
-                .forEach(v => v.classList.add('covered'));
-        }
-        mushafRevealPct = 0;
-        if (mushafHTMode) { clearAllCoverClips(); applyHTReveal(); }
-        updateModeBtns();
-        applyMushafReveal();
     }
 
     // Viewport resize (e.g. rotation): the %-based coords covers scale with the
@@ -2885,7 +2872,7 @@
                 // cover ends at the emblem — never bleeds into the next verse.
                 // (no whitespace/newlines inside the span: they'd extend the box)
                 lineHtml += (first ? '' : ' ') +
-                    `<span class="mf-verse" data-vkey="${curVerse}" onclick="tapVerse(this)">${frag}<span class="mf-cover">${toArabicDigits(curVerse.split(':')[1])}</span></span>`;
+                    `<span class="mf-verse" data-vkey="${curVerse}" onclick="toggleVerseCloze(this)">${frag}<span class="mf-cover">${toArabicDigits(curVerse.split(':')[1])}</span></span>`;
                 first = false;
                 frag = '';
             }
@@ -3985,7 +3972,7 @@
                 // v66: the empty cream strips EITHER SIDE of the page card, and the
                 // page-number row, reveal too — anything in the panel body that is
                 // not the page itself, the corner labels, the slider or a control.
-                if (e.target.closest('.mf-classic, .mf-classic-corners, .mf-reveal-row,'
+                if (e.target.closest('.mf-classic, .mf-classic-corners,'
                                       + ' input, button, a, select, label')) return;
                 mushafRevealNext();
             });
