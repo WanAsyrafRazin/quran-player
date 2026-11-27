@@ -1790,9 +1790,7 @@
         <div class="mushaf-float-header" id="mushaf-drag">
             <button type="button" class="mushaf-nav" id="mushaf-help-btn" onclick="openHelp()" title="Help &amp; hotkeys" aria-label="Help and hotkeys">❓</button>
             <div class="mushaf-float-title" id="mushaf-info">Loading…</div>
-            <button class="mushaf-nav" id="mushaf-prev" onclick="mushafGo(1)" aria-label="Next page" title="Next page">◀</button>
             <button class="mushaf-nav" id="mushaf-play" onclick="mushafTogglePlay()" aria-label="Play or pause" title="Play / pause">▶</button>
-            <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(-1)" aria-label="Previous page" title="Previous page">▶</button>
             <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle page style" title="Plain text — tap to switch">⬛</button>
             <button class="mushaf-nav" id="mushaf-theme-btn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Night mode">🌙</button>
             <button class="mushaf-nav" id="mushaf-slider-btn" onclick="cycleSliderPos()" aria-label="Move the reveal slider" title="Reveal slider: bottom middle (tap to move)">⬇</button>
@@ -1861,7 +1859,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v92';
+    const APP_VERSION = 'v93';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2408,10 +2406,8 @@
                 ? `📖 Page ${p} · ${first.surahName} ${first.ayahNum}–${last.ayahNum}`
                 : `📖 Page ${p} · ${first.surahName} ${first.ayahNum} – ${last.surahName} ${last.ayahNum}`)
             : `📖 Page ${p}`;
-        // RTL navigation: the LEFT arrow advances to the next page, the RIGHT
-        // arrow goes back (mushaf reading flows right → left)
-        document.getElementById('mushaf-prev').disabled = p >= 604;
-        document.getElementById('mushaf-next').disabled = p <= 1;
+        // v93: the on-screen page-turn buttons are gone; pages turn by swipe, the
+        // ← / → keys, trackpad scroll or the page number + Go box (see mushafGo).
 
         const pageEl = document.getElementById('mushaf-page');
         pageEl.innerHTML = '<div class="mushaf-loading">Loading…</div>';
@@ -5269,7 +5265,7 @@
                 <div class="help-row"><code>1 / 2 / 3 / loop</code><span>Repeat each verse or whole set</span></div>
             </div>
             <div class="help-section"><div class="help-title">📖 Mushaf pages</div>
-                <div class="help-row"><code>◀ / ▶</code><span>Next / previous page</span></div>
+                <div class="help-row"><code>← / → keys</code><span>Next / previous page</span></div>
                 <div class="help-row"><code>swipe ←/→</code><span>Next / previous page</span></div>
                 <div class="help-row"><code>page number + Go</code><span>Jump to any page (1–604)</span></div>
             </div>
