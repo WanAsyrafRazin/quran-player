@@ -1879,7 +1879,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v88';
+    const APP_VERSION = 'v89';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -4380,6 +4380,7 @@
             btn.classList.toggle('selected', Math.abs(parseFloat(btn.dataset.speed) - speed) < 0.001)
         );
         localStorage.setItem('quran_player_speed', speed);
+        if (typeof refreshMediaSession === 'function') refreshMediaSession();
     }
 
     function selectSpeed(element, speed) {
@@ -4567,8 +4568,15 @@
         }
     }
 
-    // Keep the OS notification in sync with the current verse
-    function syncMediaSession(v) {
+    // Keep the OS notification in sync with the current verse.
+    // v89: the card used to lag behind (lock screen said ayah 109 while the app was on 114).
+    // The app only moves to the next verse when a `timeupdate` event reaches handleVerseEnd,
+    // one verse per event, so whenever the page is throttled or in the background the card
+    // keeps the last verse it was given. Two changes: (1) the card is now driven by the
+    // verse the AUDIO is actually in (see refreshMediaSession), not by that event chain,
+    // and (2) it is re-asserted on a timer and whenever the page wakes up.
+    let lastMediaKey = '';
+    function syncMediaSession(v, force) {
         if (!('mediaSession' in navigator)) return;
         try {
             const title = v.segType === 'basmalah'
@@ -4576,18 +4584,49 @@
                 : v.segType === 'istiaadha'
                     ? `A'udhu Billah — ${v.surahName}`
                     : `${v.surahNum}. ${v.surahName} — Ayah ${v.ayahNum}`;
+            const artist = `Maher al Muaiqly · ${playbackSpeed.toFixed(2).replace(/0$/, '')}x · Juz ${v.juz} · Page ${v.page}`;
+            const key = title + '|' + artist;
+            // unchanged: don't rebuild the metadata (that re-fetches the artwork) unless forced
+            if (!force && key === lastMediaKey && navigator.mediaSession.metadata) return;
+            lastMediaKey = key;
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: title,
-                artist: `Maher al Muaiqly · ${playbackSpeed.toFixed(2).replace(/0$/, '')}x · Juz ${v.juz} · Page ${v.page}`,
+                artist: artist,
                 album: 'Quran Player',
                 artwork: [
                     { src: 'icon-192-v2.png', sizes: '192x192', type: 'image/png' },
                     { src: 'icon-512-v2.png', sizes: '512x512', type: 'image/png' }
                 ]
             });
-            navigator.mediaSession.playbackState = 'playing';
+            navigator.mediaSession.playbackState = isPaused ? 'paused' : 'playing';
         } catch (e) {}
     }
+
+    // The playlist entry whose time range contains the audio's current position (same file),
+    // or null when the position is not inside any entry (e.g. mid-switch between files).
+    function verseAtAudioTime() {
+        const t = audioPlayer.currentTime, cur = audioPlayer.src;
+        for (let i = 0; i < playlist.length; i++) {
+            const v = playlist[i];
+            if (t >= v.start_time - 0.05 && t < v.end_time && srcOf(v.audio_url) === cur) return v;
+        }
+        return null;
+    }
+
+    // Point the notification at the verse that is really playing. Cheap and idempotent.
+    function refreshMediaSession(force) {
+        if (!isPlaying && !isPaused) return;
+        if (!playlist.length) return;
+        const v = verseAtAudioTime() || playlist[currentAyahIndex];
+        if (v) syncMediaSession(v, force === true);
+    }
+    audioPlayer.addEventListener('timeupdate', () => refreshMediaSession());
+    audioPlayer.addEventListener('playing', () => refreshMediaSession(true));
+    audioPlayer.addEventListener('seeked', () => refreshMediaSession());
+    setInterval(() => refreshMediaSession(), 1000);
+    document.addEventListener('visibilitychange', () => refreshMediaSession(true));
+    window.addEventListener('pageshow', () => refreshMediaSession(true));
+    window.addEventListener('focus', () => refreshMediaSession(true));
 
     function setupMediaSession() {
         if (!('mediaSession' in navigator)) return;
