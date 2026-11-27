@@ -179,7 +179,6 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            /* v71: anchor for the side-mounted vertical slider */
             position: relative;
         }
         /* nothing in the stack may be squashed when the viewport is short */
@@ -197,36 +196,11 @@
             width: 100%;
         }
         .mushaf-float-body .mf-below { flex: 1 1 auto; }
-        /* v71: the reveal slider can also live on either side, vertical and near the
-           bottom. The row becomes an absolutely-positioned box whose CENTRE sits where
-           JS puts it, then rotates -90deg: value 0 ends up at the bottom, 100 at the top,
-           so dragging UP reveals — same muscle memory as the horizontal one. */
-        .mf-reveal-row.side {
-            position: absolute;
-            bottom: 70px;                 /* near the bottom, clear of the home indicator */
-            width: 44px;                  /* final footprint: thumb thickness */
-            height: var(--rail-len, 240px);
-            padding: 0;
-            margin: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 6;
-        }
-        /* v72: nudged in from the screen edge so the rail reads as part of the page
-           rather than stuck to the bezel (still inside the reserved 56px gutter) */
-        .mf-reveal-row.side.right { right: 20px; }
-        .mf-reveal-row.side.left  { left: 20px; }
-        /* the track keeps its length; only the INPUT rotates, inside the box above */
-        .mf-reveal-row.side .mf-reveal-slider {
-            width: var(--rail-len, 240px);
-            /* the input has a ~129px intrinsic width and would be flex-shrunk by the
-               44px-wide rail box — pin it or the rail collapses to a stub */
-            min-width: var(--rail-len, 240px);
-            flex: 0 0 auto;
-            height: 44px;
-            transform: rotate(90deg);     /* value 0 ends up at the BOTTOM → drag up reveals */
-        }
+        /* v90: the reveal slider always sits at the bottom, horizontal. Its position is
+           middle (default), left or right. Left keeps its LEFT end fixed, so a longer
+           slider grows to the right; right keeps its RIGHT end fixed and grows left. */
+        .mf-reveal-row.pos-left  { justify-content: flex-start; }
+        .mf-reveal-row.pos-right { justify-content: flex-end; }
         .mushaf-loading {
             text-align: center;
             color: #8E919D;
@@ -311,9 +285,7 @@
         .mf-reveal-slider {
             -webkit-appearance: none;
             appearance: none;
-            /* v72: 1/3 of the SCREEN width (was 2/3) — same length when the slider is
-               rotated onto a side rail, so the track keeps one physical size everywhere.
-               v73: length is a user setting — percent of the SCREEN width, set from
+            /* v72: 1/3 of the SCREEN width (was 2/3). v73: length is a user setting — percent of the SCREEN width, set from
                the ⚙ Settings panel (20–100%, default 33%). */
             width: min(var(--slider-len, 33.333vw), 100%);
             max-width: none;
@@ -470,6 +442,7 @@
                 0 0 0 1px rgba(120, 90, 30, .12);
         }
         .mf-classic .mf-classic-text .mf-verse:hover { background: transparent; }
+        body.dark-mode .mf-classic .mf-classic-text .mf-cover { background: #1A232E; }
         /* v65 NIGHT MODE: the scan is colour-inverted (the page's paper is a TRANSPARENT
            colour, so the box behind it must be dark or the inverted light text would sit
            on a light box). invert + hue-rotate keeps the ornament hues roughly right.
@@ -1814,7 +1787,7 @@
             <button class="mushaf-nav" id="mushaf-next" onclick="mushafGo(-1)" aria-label="Previous page" title="Previous page">▶</button>
             <button class="mushaf-nav" id="mushaf-style-btn" onclick="toggleMushafStyle()" aria-label="Toggle page style" title="Plain text — tap to switch">⬛</button>
             <button class="mushaf-nav" id="mushaf-theme-btn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Night mode">🌙</button>
-            <button class="mushaf-nav" id="mushaf-slider-btn" onclick="cycleSliderPos()" aria-label="Move the reveal slider" title="Reveal slider: bottom (tap to move)">⬇</button>
+            <button class="mushaf-nav" id="mushaf-slider-btn" onclick="cycleSliderPos()" aria-label="Move the reveal slider" title="Reveal slider: bottom middle (tap to move)">⬇</button>
             <button class="mushaf-float-close" id="mushaf-close" onclick="toggleMushaf()" aria-label="Close Mushaf">✕</button>
         </div>
         <div class="mushaf-float-controls">
@@ -1879,7 +1852,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v89';
+    const APP_VERSION = 'v90';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2182,9 +2155,6 @@
     // the cloze one by one. There is no dead band on the left / right.
     const MUSHAF_DEAD_BAND_PX = 20;
     const MUSHAF_SIDE_TAP = 0;  // (no longer used: the page is full-bleed since v88)
-    // v71: width reserved on EACH side of the page when the reveal slider is mounted on a
-    // side rail (44px thumb + breathing room). The page shrinks by 2× this to make room.
-    const MUSHAF_RAIL_GUTTER = 56;
     // v60: image editions only — the text-rendered 'plain' mode is gone. Older stored
     // values ('plain'/'classic') migrate to the Madani edition.
     const MUSHAF_CYCLE = ['madani', 'tajweed'];
@@ -2575,12 +2545,11 @@
             let bestK = null, bestN = 0;
             for (const [k, n] of counts) if (n > bestN) { bestN = n; bestK = k; }
             const [r0, g0, b0] = (bestK || '31,31,29').split(',').map(v => (parseInt(v, 10) << 3) + 4);
-            // v65: in night mode the cover must match what is actually behind the text.
-            // The Madani scan keeps its paper TRANSPARENT, so in night mode the visible
-            // paper IS the dark page box — inverting the sampled white would put a black
-            // box on a navy page (which is exactly what it did). So match the box colour.
-            pageEl.style.setProperty('--mf-cover-bg',
-                document.body.classList.contains('dark-mode') ? '#1A232E' : `rgb(${r0}, ${g0}, ${b0})`);
+            // v90: always store the DAY paper colour. Night mode gets its dark cover from
+            // CSS (body.dark-mode rules), so toggling the theme either way is correct
+            // without a re-render. Storing '#1A232E' here when the page was drawn at night
+            // left the covers navy after switching back to day mode.
+            pageEl.style.setProperty('--mf-cover-bg', `rgb(${r0}, ${g0}, ${b0})`);
         } catch (e) { /* canvas blocked or image tainted — fall back to default */ }
 
         // Panel body size: the fullscreen window should show the WHOLE page
@@ -2592,7 +2561,7 @@
         // v67: reserve MUSHAF_SIDE_TAP px of empty cream on EACH side of the card, on
         // top of the body's 16px padding, so the reveal-by-one tap strip beside the page
         // is ~32px wide instead of a fiddly 16px. The page shrinks ~9% to pay for it.
-        const railGutter = mushafSliderPos === 'bottom' ? 0 : MUSHAF_RAIL_GUTTER;
+        const railGutter = 0;   // v90: the slider is always at the bottom, never in a side gutter
         const availW = (panel ? panel.getBoundingClientRect().width : 430) - 32
                        - 2 * MUSHAF_SIDE_TAP - 2 * railGutter;
         // reserve: horizontal padding (~32) + corners row. The corners row is
@@ -2754,51 +2723,47 @@
         applySliderLayout();
     }
 
-    // ── v71: where the reveal slider lives ─────────────────────────────────────────
-    // 'bottom' (default, in flow) | 'right' | 'left' (vertical rail near the bottom).
-    // Remembered per device — an iPad on a stand wants the rail, a phone wants the bar.
+    // ── v90: where the reveal slider lives ──────────────────────────────────────────
+    // 'center' (default) | 'left' | 'right' — always horizontal, at the bottom.
+    // Remembered per device. Old saved values: 'bottom' becomes center; the former
+    // vertical 'left' / 'right' rails become the horizontal left / right positions.
+    const SLIDER_POS_ORDER = ['center', 'left', 'right'];
+    const SLIDER_POS_INFO = {
+        center: { icon: '⬇', label: 'bottom middle' },
+        left:   { icon: '↙', label: 'bottom left' },
+        right:  { icon: '↘', label: 'bottom right' }
+    };
     let mushafSliderPos = (() => {
-        try { return localStorage.getItem('qp_slider_pos') || 'bottom'; } catch (e) { return 'bottom'; }
+        let v = 'center';
+        try { v = localStorage.getItem('qp_slider_pos') || 'center'; } catch (e) {}
+        if (v === 'bottom') v = 'center';
+        return SLIDER_POS_ORDER.includes(v) ? v : 'center';
     })();
 
     function updateSliderBtn() {
         const b = document.getElementById('mushaf-slider-btn');
         if (!b) return;
-        b.textContent = mushafSliderPos === 'bottom' ? '⬇' : (mushafSliderPos === 'right' ? '➡' : '⬅');
-        b.title = 'Reveal slider: ' + mushafSliderPos + ' (tap to move it)';
-        b.setAttribute('aria-label', 'Move the reveal slider (now ' + mushafSliderPos + ')');
+        const info = SLIDER_POS_INFO[mushafSliderPos];
+        b.textContent = info.icon;
+        b.title = 'Reveal slider: ' + info.label + ' (tap to move it)';
+        b.setAttribute('aria-label', 'Move the reveal slider (now ' + info.label + ')');
     }
 
+    // middle -> left -> right -> middle
     function cycleSliderPos() {
-        mushafSliderPos = mushafSliderPos === 'bottom' ? 'right'
-                        : mushafSliderPos === 'right' ? 'left' : 'bottom';
+        const i = SLIDER_POS_ORDER.indexOf(mushafSliderPos);
+        mushafSliderPos = SLIDER_POS_ORDER[(i + 1) % SLIDER_POS_ORDER.length];
         try { localStorage.setItem('qp_slider_pos', mushafSliderPos); } catch (e) {}
-        showMushafPage(mushafPage);   // re-render so the page reserves (or frees) the gutter
+        applySliderLayout();
     }
 
-    // Place the slider: in flow at the bottom, or an absolutely positioned vertical rail
-    // whose CENTRE is computed here, then rotated -90deg (0 at the bottom, 100 at the top,
-    // so dragging UP reveals). Length = 2/3 of the screen width, like the horizontal one,
-    // clamped to the panel height so it can never overflow.
     function applySliderLayout() {
         const body = document.getElementById('mushaf-page');
         const row = body && body.querySelector('.mf-reveal-row');
         updateSliderBtn();
         if (!row) return;
-        if (mushafSliderPos === 'bottom') {
-            row.classList.remove('side', 'right', 'left');
-            row.removeAttribute('style');
-            return;
-        }
-        const br = body.getBoundingClientRect();
-        // length = 2/3 of the screen width (same physical size as the horizontal track),
-        // but never taller than the panel can hold above its bottom margin
-        const len = Math.max(110, Math.min(Math.round(window.innerWidth * (mushafSliderLen / 100)),
-                                           Math.round(br.height - 200)));
-        row.classList.add('side');
-        row.classList.toggle('right', mushafSliderPos === 'right');
-        row.classList.toggle('left', mushafSliderPos === 'left');
-        row.style.setProperty('--rail-len', len + 'px');
+        row.classList.toggle('pos-left', mushafSliderPos === 'left');
+        row.classList.toggle('pos-right', mushafSliderPos === 'right');
     }
 
     // v66: a tap ON an ayah bar is handled by the bar itself (toggleVerseCloze).
@@ -5200,7 +5165,7 @@
                            oninput="setSliderLen(this.value, true)" aria-label="Reveal slider length">
                     <span class="set-val" id="slider-len-val">33%</span>
                 </div>
-                <div class="set-hint">Percent of the screen width. Applies to the bottom slider and to the side rail.</div>
+                <div class="set-hint">Percent of the screen width. In the middle position it grows both ways; on the left it grows to the right; on the right it grows to the left.</div>
             </div>
             <div class="help-section"><div class="help-title">Tap step</div>
                 <div class="set-row set-slider-row">
