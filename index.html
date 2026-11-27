@@ -1852,7 +1852,7 @@
 
 <script>
     // --- Build version badge (mirrors sw.js CACHE name; bump both on release) ---
-    const APP_VERSION = 'v90';
+    const APP_VERSION = 'v91';
     (function () {
         const b = document.getElementById('version-badge');
         if (b) b.textContent = APP_VERSION;
@@ -2129,6 +2129,15 @@
     let qpMainView = (function () {
         try { return localStorage.getItem('qp_main_view') === 'mushaf' ? 'mushaf' : 'selection'; }
         catch (e) { return 'selection'; }
+    })();
+    // v91: how wide the mushaf page may get. 'natural' = true shape (never stretched),
+    // 'balanced' = stretched by at most MUSHAF_BALANCED_STRETCH (default), 'fill' = edge to
+    // edge whatever the shape. Whatever the page does not use becomes margin, and the
+    // margins are reveal-one-by-one tap targets.
+    const MUSHAF_BALANCED_STRETCH = 1.2;
+    let qpPageFit = (function () {
+        try { const v = localStorage.getItem('qp_page_fit'); return ['natural', 'balanced', 'fill'].includes(v) ? v : 'balanced'; }
+        catch (e) { return 'balanced'; }
     })();
     let mushafSliderLen = (function () {
         try {
@@ -2588,7 +2597,12 @@
         const fullW = Math.max(200, panelW - 2 * railGutter);
         const bodyCW = Math.max(200, panelW - 32);               // body content width (16px padding each side)
         const sharedH = Math.min(availH, fullW / MUSHAF_MAX_ASPECT);
-        const maxW = fullW;
+        // v91: width follows the "Page width" setting. naturalW is the width at which the
+        // page has its true shape for this height; the stretch factor is maxW / naturalW.
+        const naturalW = sharedH * MUSHAF_MAX_ASPECT;
+        const maxW = qpPageFit === 'fill' ? fullW
+                   : qpPageFit === 'natural' ? Math.min(fullW, naturalW)
+                   : Math.min(fullW, naturalW * MUSHAF_BALANCED_STRETCH);
         const boxH = Math.round(sharedH);
         const scale = maxW / iw;
         const rowW = Math.min(maxW, bodyCW);                     // corner labels + page number stay inset
@@ -3518,6 +3532,20 @@
         document.querySelectorAll('#main-view-seg .seg-option').forEach(b => {
             b.classList.toggle('selected', b.dataset.view === qpMainView);
         });
+    }
+
+    function syncPageFitUI() {
+        document.querySelectorAll('#page-fit-seg .seg-option').forEach(b => {
+            b.classList.toggle('selected', b.dataset.fit === qpPageFit);
+        });
+    }
+
+    function setPageFit(v) {
+        qpPageFit = ['natural', 'balanced', 'fill'].includes(v) ? v : 'balanced';
+        try { localStorage.setItem('qp_page_fit', qpPageFit); } catch (e) {}
+        syncPageFitUI();
+        const panel = document.getElementById('mushaf-panel');
+        if (panel && panel.classList.contains('visible')) showMushafPage(mushafPage);
     }
 
     function setMainView(v) {
@@ -5159,6 +5187,16 @@
                 </div>
                 <div class="set-hint">Which screen the app opens to. The mushaf reopens on the last page you were reading, and the audio selection follows that page.</div>
             </div>
+            <div class="help-section"><div class="help-title">Page width</div>
+                <div class="set-row">
+                    <div class="segmented-control" id="page-fit-seg">
+                        <button class="seg-option" data-fit="natural" onclick="setPageFit('natural')">Natural</button>
+                        <button class="seg-option selected" data-fit="balanced" onclick="setPageFit('balanced')">Balanced</button>
+                        <button class="seg-option" data-fit="fill" onclick="setPageFit('fill')">Fill</button>
+                    </div>
+                </div>
+                <div class="set-hint">Natural keeps the page's true shape. Balanced stretches it a little (up to 20%) to use the width. Fill runs it edge to edge, which looks wide on tablets. Space beside the page is a tap area that reveals one by one.</div>
+            </div>
             <div class="help-section"><div class="help-title">Reveal slider length</div>
                 <div class="set-row set-slider-row">
                     <input type="range" id="set-slider-len" min="20" max="100" step="1" value="33"
@@ -5240,6 +5278,7 @@
         if (o) o.classList.add('visible');
         setSliderLen(mushafSliderLen, false);
         syncMainViewUI();
+        syncPageFitUI();
     }
     function closeSettings() {
         const o = document.getElementById('settings-overlay');
